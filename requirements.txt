@@ -3,4 +3,3 @@ uvicorn>=0.30
 pydantic>=2.7
 selenium>=4.22
 webdriver-manager>=4.0
-chromium-binary==0.1.0
