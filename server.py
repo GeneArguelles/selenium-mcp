@@ -226,8 +226,8 @@ def mcp_health():
 
 @app.get("/mcp/debug")
 def mcp_debug():
-    """Diagnostics for Render sandbox environment (never crashes)."""
-    import traceback
+    """Diagnostics for Render sandbox environment."""
+    import traceback, subprocess, shutil, stat
 
     info = {}
     try:
@@ -237,16 +237,43 @@ def mcp_debug():
         info["home"] = os.environ.get("HOME")
         info["path_env"] = os.environ.get("PATH")
 
-        # Safely test pyppeteer chromium path
+        # Locate Chromium
         try:
             chromium_exec = chromium_downloader.chromium_executable()
             info["chromium_exec"] = chromium_exec
             info["chrome_exists"] = os.path.exists(chromium_exec)
         except Exception as e:
             info["chromium_exec_error"] = str(e)
-            info["chrome_exists"] = False
+            chromium_exec = None
 
-        # List a few candidate binaries visible on PATH
+        # Relocate to /tmp if necessary
+        relocated_path = "/tmp/chromium/chrome"
+        try:
+            if chromium_exec and os.path.exists(chromium_exec):
+                os.makedirs("/tmp/chromium", exist_ok=True)
+                shutil.copy2(chromium_exec, relocated_path)
+                os.chmod(relocated_path, 0o755)
+                info["relocated_path"] = relocated_path
+                info["relocated_exists"] = os.path.exists(relocated_path)
+            else:
+                info["relocated_path"] = None
+        except Exception as e:
+            info["relocation_error"] = str(e)
+
+        # Try executing the relocated binary
+        try:
+            result = subprocess.run(
+                [relocated_path, "--version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=5,
+            )
+            info["chrome_version_output"] = result.stdout.decode().strip()
+            info["chrome_exec_status"] = result.returncode
+        except Exception as e:
+            info["chrome_exec_error"] = str(e)
+
+        # Which binaries are visible
         import shutil
         info["which_chromium"] = shutil.which("chromium")
         info["which_chrome"] = shutil.which("chrome")
