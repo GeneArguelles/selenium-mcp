@@ -1,38 +1,43 @@
 # server.py
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+import undetected_chromedriver as uc
 import os
 import time
+import shutil
+import json
 
 app = FastAPI()
 _driver = None
 
 
+@app.get("/")
+def root():
+    """Root route for quick Render diagnostics."""
+    return {"status": "ok", "message": "Selenium MCP server running"}
+
 def init_chrome_driver():
-    """Initialize a new headless Chrome WebDriver instance for macOS."""
-    options = webdriver.ChromeOptions()
+    """Initialize headless Chrome using undetected_chromedriver (cross-platform)."""
+    import undetected_chromedriver as uc
+
+    options = uc.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,800")
 
-    # ✅ Explicitly set Chrome binary path for macOS
-    options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-
-    # ✅ Use webdriver-manager to get a compatible driver
-    service = Service(ChromeDriverManager().install())
+    # ✅ Do NOT force any binary location — let uc handle it automatically
+    # It will download and use a compatible Chromium build for Render.
 
     try:
-        driver = webdriver.Chrome(service=service, options=options)
+        driver = uc.Chrome(options=options, headless=True)
+        print("[INFO] Chrome driver initialized successfully (auto-managed by undetected-chromedriver)")
         return driver
     except Exception as e:
-        print(f"[ERROR] Failed to initialize Chrome driver: {e}")
-        raise
-
+        print(f"[ERROR] Chrome failed to start: {e}")
+        raise HTTPException(status_code=500, detail=f"Chrome could not start in current environment: {e}")
 
 def get_driver():
     """Return a working Chrome driver, with automatic recovery if it fails."""
@@ -40,7 +45,7 @@ def get_driver():
 
     def _ensure_alive(d):
         try:
-            d.title  # Try a lightweight command to see if driver responds
+            _ = d.title  # lightweight check
             return True
         except Exception:
             return False
@@ -63,6 +68,7 @@ def get_driver():
 @app.get("/mcp/schema")
 def mcp_schema():
     """Advertise available tools to OpenAI's Agent Builder."""
+    print("[INFO] Serving MCP schema")
     return {
         "version": "2025-10-01",
         "tools": [
@@ -122,7 +128,7 @@ def mcp_invoke(body: InvokeBody):
         if body.tool == "selenium_open_page":
             url = body.arguments["url"]
             driver.get(url)
-            time.sleep(1)  # slight delay for page load
+            time.sleep(1)
             return {"ok": True, "url": url}
 
         elif body.tool == "selenium_click":
@@ -147,7 +153,6 @@ def mcp_invoke(body: InvokeBody):
             raise HTTPException(status_code=404, detail=f"Unknown tool: {body.tool}")
 
     except Exception as e:
-        # Attempt to recover if Chrome crashes
         print(f"[ERROR] Exception during tool invocation: {e}")
         try:
             if _driver:
@@ -158,22 +163,19 @@ def mcp_invoke(body: InvokeBody):
         raise HTTPException(status_code=500, detail=f"Recovered from Chrome failure: {e}")
 
 
-# ✅ NEW HEALTH-CHECK ENDPOINT
 @app.get("/mcp/health")
 def mcp_health():
-    """
-    Lightweight health check endpoint.
-    Returns {"status": "ok"} if Chrome driver is alive,
-    {"status": "down"} otherwise.
-    """
+    """Lightweight health check endpoint."""
     global _driver
     try:
         if _driver is None:
             return {"status": "down", "message": "Driver not initialized"}
 
-        # Try a no-op call to ensure responsiveness
         _ = _driver.title
         return {"status": "ok", "message": "Selenium driver alive"}
 
     except Exception as e:
         return {"status": "down", "message": f"Driver error: {e}"}
+
+
+print("[INFO] Selenium MCP Server started")
