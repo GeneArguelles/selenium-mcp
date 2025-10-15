@@ -22,7 +22,7 @@ _driver = None
 # ================================================================
 
 def init_chrome_driver():
-    """Initialize headless Chrome driver for Render sandbox (safe relocation version)."""
+    """Initialize headless Chrome driver for Render, using verified /tmp/chromium/chrome."""
     import os, stat, shutil
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
@@ -41,34 +41,40 @@ def init_chrome_driver():
         chromium_path = chromium_downloader.chromium_executable()
     print(f"[DEBUG] Original Chromium path: {chromium_path}")
 
-    # Step 2: Copy to a guaranteed executable directory
+    # Step 2: Relocate to /tmp/chromium/chrome
     target_dir = "/tmp/chromium"
     os.makedirs(target_dir, exist_ok=True)
     relocated_path = os.path.join(target_dir, "chrome")
 
-    try:
-        shutil.copy2(chromium_path, relocated_path)
-        os.chmod(relocated_path, 0o755)
-        print(f"[INFO] Chromium relocated and chmodded: {relocated_path}")
-    except Exception as e:
-        print(f"[WARN] Could not relocate Chromium: {e}")
-        relocated_path = chromium_path  # fallback
+    if not os.path.exists(relocated_path):
+        try:
+            shutil.copy2(chromium_path, relocated_path)
+            os.chmod(relocated_path, 0o755)
+            print(f"[INFO] Chromium relocated and chmodded: {relocated_path}")
+        except Exception as e:
+            raise RuntimeError(f"Chromium relocation failed: {e}")
+    else:
+        print(f"[INFO] Using existing relocated Chromium binary: {relocated_path}")
 
-    # Step 3: Install matching ChromeDriver
+    # Step 3: Verify executable status
+    if not os.access(relocated_path, os.X_OK):
+        raise RuntimeError(f"Chromium binary not executable: {relocated_path}")
+
+    # Step 4: Install matching ChromeDriver
     chromedriver_autoinstaller.install()
 
-    # Step 4: Configure Selenium
+    # Step 5: Configure Selenium
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,800")
-    options.binary_location = relocated_path  # << key line
+    options.binary_location = relocated_path  # << use verified path
 
     print(f"[INFO] Using Chromium binary at: {options.binary_location}")
 
-    # Step 5: Start driver
+    # Step 6: Start driver
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
