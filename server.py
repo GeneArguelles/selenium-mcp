@@ -22,66 +22,69 @@ _driver = None
 # ================================================================
 
 def init_chrome_driver():
-    """Initialize headless Chrome driver for Render, using verified /tmp/chromium/chrome."""
-    import os, stat, shutil
+    """Initialize a headless Chrome WebDriver using a relocated Chromium binary (Render-safe)."""
+    import os, stat, shutil, subprocess
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from selenium.webdriver.chrome.options import Options
-    from webdriver_manager.chrome import ChromeDriverManager
     import pyppeteer.chromium_downloader as chromium_downloader
     import chromedriver_autoinstaller
 
-    print("[INFO] Starting Chrome driver initialization...")
+    print("[INFO] Initializing headless Chrome for Render sandbox...")
 
-    # Step 1: Locate or download Chromium
+    # Step 1: Get pyppeteer Chromium binary
     chromium_path = chromium_downloader.chromium_executable()
     if not os.path.exists(chromium_path):
-        print("[WARN] Chromium not found — downloading fresh copy...")
+        print("[WARN] No local Chromium found, downloading...")
         chromium_downloader.download_chromium()
         chromium_path = chromium_downloader.chromium_executable()
-    print(f"[DEBUG] Original Chromium path: {chromium_path}")
+    print(f"[DEBUG] Found Chromium binary: {chromium_path}")
 
-    # Step 2: Relocate to /tmp/chromium/chrome
+    # Step 2: Relocate Chromium to /tmp for executable permission
     target_dir = "/tmp/chromium"
     os.makedirs(target_dir, exist_ok=True)
     relocated_path = os.path.join(target_dir, "chrome")
 
-    if not os.path.exists(relocated_path):
-        try:
-            shutil.copy2(chromium_path, relocated_path)
-            os.chmod(relocated_path, 0o755)
-            print(f"[INFO] Chromium relocated and chmodded: {relocated_path}")
-        except Exception as e:
-            raise RuntimeError(f"Chromium relocation failed: {e}")
-    else:
-        print(f"[INFO] Using existing relocated Chromium binary: {relocated_path}")
+    try:
+        shutil.copy2(chromium_path, relocated_path)
+        os.chmod(relocated_path, 0o755)
+    except Exception as e:
+        print(f"[WARN] Failed to copy Chromium: {e}")
+        relocated_path = chromium_path
 
-    # Step 3: Verify executable status
-    if not os.access(relocated_path, os.X_OK):
-        raise RuntimeError(f"Chromium binary not executable: {relocated_path}")
+    # Step 3: Verify Chromium runs
+    try:
+        result = subprocess.run([relocated_path, "--version"], capture_output=True, timeout=5)
+        print(f"[INFO] Chromium OK: {result.stdout.decode().strip()}")
+    except Exception as e:
+        raise RuntimeError(f"Chromium failed sanity check: {e}")
 
-    # Step 4: Install matching ChromeDriver
+    # Step 4: Install and locate matching ChromeDriver
     chromedriver_autoinstaller.install()
+    chromedriver_path = chromedriver_autoinstaller.get_chromedriver_path()
+    if not os.path.exists(chromedriver_path):
+        raise RuntimeError("ChromeDriver could not be installed or located!")
+    print(f"[INFO] ChromeDriver path: {chromedriver_path}")
 
-    # Step 5: Configure Selenium
+    # Step 5: Configure headless Chrome options
     options = Options()
+    options.binary_location = relocated_path  # Explicit binary path
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,800")
-    options.binary_location = relocated_path  # << use verified path
+    options.add_argument("--disable-extensions")
+    options.add_argument("--remote-debugging-port=9222")
 
-    print(f"[INFO] Using Chromium binary at: {options.binary_location}")
-
-    # Step 6: Start driver
+    # Step 6: Start ChromeDriver explicitly with verified paths
     try:
-        service = Service(ChromeDriverManager().install())
+        service = Service(chromedriver_path)
         driver = webdriver.Chrome(service=service, options=options)
-        print("[INFO] Chrome driver initialized successfully.")
+        print("[INFO] ✅ Selenium ChromeDriver initialized successfully.")
         return driver
     except Exception as e:
-        print(f"[ERROR] Chrome failed to start: {e}")
+        print(f"[ERROR] ❌ Chrome failed to start: {e}")
         raise RuntimeError(f"500: Chrome could not start in current environment: {e}")
 
 # ================================================================
