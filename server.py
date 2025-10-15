@@ -290,11 +290,20 @@ def index():
 # ENTRYPOINT
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Pre-warm Chromium download to avoid Render SSL timeout
-    try:
-        chromium_downloader.download_chromium()
-    except Exception:
-        pass
-
+    import threading
     import uvicorn
+    from pyppeteer import chromium_downloader
+
+    # Start background thread to cache Chromium after app starts
+    def warmup_chromium():
+        try:
+            print("[INIT] Background Chromium warmup started.")
+            chromium_downloader.download_chromium()
+            print("[INIT] Chromium cached successfully.")
+        except Exception as e:
+            print(f"[WARN] Chromium warmup failed: {e}")
+
+    threading.Thread(target=warmup_chromium, daemon=True).start()
+
+    # Start FastAPI server immediately
     uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
