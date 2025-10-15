@@ -18,34 +18,36 @@ def root():
     return {"status": "ok", "message": "Selenium MCP server running"}
 
 def init_chrome_driver():
-    """Initialize headless Chrome using undetected_chromedriver (safe for Render/Linux)."""
-    import undetected_chromedriver as uc
+    """Initialize headless Chrome using chromedriver_autoinstaller and bundled Chromium."""
+    import chromedriver_autoinstaller
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.chrome.options import Options
+    import os
+    import pyppeteer.chromium_downloader as chromium_downloader
 
-    options = uc.ChromeOptions()
+    # Ensure a working Chrome binary is downloaded and ready
+    chrome_path = chromium_downloader.chromium_executable()
+    if not os.path.exists(chrome_path):
+        print("[INFO] Downloading Chromium...")
+        chromium_downloader.download_chromium()
+    print(f"[INFO] Using Chromium binary at {chrome_path}")
+
+    # Ensure the matching chromedriver is installed
+    chromedriver_autoinstaller.install()
+
+    options = Options()
+    options.binary_location = chrome_path
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,800")
 
-    # ✅ Force UC to download and use a known good Chromium build
-    # This prevents 'Binary Location Must be a String' when auto-detect fails.
-    try:
-        driver = uc.Chrome(
-            options=options,
-            headless=True,
-            use_subprocess=True,
-            driver_executable_path=None,
-            browser_executable_path=None
-        )
-        print("[INFO] Chrome driver initialized successfully (auto-managed by UC).")
-        return driver
-    except Exception as e:
-        print(f"[ERROR] Chrome failed to start: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Chrome could not start in current environment: {e}",
-        )
+    service = Service()
+    driver = webdriver.Chrome(service=service, options=options)
+    print("[INFO] Selenium Chrome driver started successfully (Render-safe Chromium).")
+    return driver
 
 def get_driver():
     """Return a working Chrome driver, with automatic recovery if it fails."""
