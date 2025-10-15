@@ -3,6 +3,6 @@ uvicorn>=0.30
 pydantic>=2.7
 selenium>=4.22
 webdriver-manager>=4.0
+chromedriver-binary-auto>=0.3.1
 chromedriver-autoinstaller>=0.6.4
 pyppeteer>=2.0.0
-setuptools>=69.0
