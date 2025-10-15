@@ -1,161 +1,103 @@
+# server.py
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-import chromedriver_autoinstaller
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 import pyppeteer.chromium_downloader as chromium_downloader
+import chromedriver_autoinstaller
 import os
 import time
-
-app = FastAPI(title="Selenium MCP Server")
-
-# -------------------------------
-# Driver Initialization Function
-# -------------------------------
-
-def init_chrome_driver():
-    """Initialize headless Chrome using downloaded Chromium and auto-installed ChromeDriver."""
-
-    try:
-        # Step 1: Locate Chromium binary (download if missing)
-        chromium_executable = chromium_downloader.chromium_executable()
-        if not os.path.exists(chromium_executable):
-            print("[INFO] Chromium not found, downloading...")
-            chromium_downloader.download_chromium()
-            chromium_executable = chromium_downloader.chromium_executable()
-
-        # Step 2: Ensure file is executable
-        os.chmod(chromium_executable, 0o755)
-        print(f"[INFO] Chromium binary ready: {chromium_executable}")
-
-        # Step 3: Add Chromium folder to PATH (Render isolates /opt/render)
-        chromium_dir = os.path.dirname(chromium_executable)
-        os.environ["PATH"] = f"{chromium_dir}:{os.environ.get('PATH', '')}"
-        print(f"[INFO] PATH updated: {os.environ['PATH']}")
-
-        # Step 4: Ensure ChromeDriver installed
-        driver_path = chromedriver_autoinstaller.install()
-        print(f"[INFO] Using ChromeDriver at: {driver_path}")
-
-        # Step 5: Configure headless Chrome options
-        options = Options()
-        options.binary_location = chromium_executable  # string path required
-        options.add_argument("--headless=new")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--remote-debugging-port=9222")
-        options.add_argument("--window-size=1280,800")
-        options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--single-process")
-        options.add_argument("--disable-extensions")
-
-        # Step 6: Launch Selenium driver
-        service = Service(driver_path)
-        driver = webdriver.Chrome(service=service, options=options)
-        print("[INFO] Selenium Chrome driver started successfully.")
-        return driver
-
-    except Exception as e:
-        print(f"[ERROR] Chrome failed to start: {e}")
-        raise HTTPException(status_code=500, detail=f"Chrome could not start in current environment: {e}")
-
-# -------------------------------
-import os
-import sys
-import json
-import shutil
 import platform
-import asyncio
-import traceback
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+import json
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-import chromedriver_autoinstaller
-from pyppeteer import chromium_downloader
-
-app = FastAPI(title="Selenium MCP Server")
-
-driver = None
-chromium_path = None
+app = FastAPI()
+_driver = None
 
 
-# -----------------------------------------------------------------------------
-# INIT CHROME DRIVER
-# -----------------------------------------------------------------------------
+# ================================================================
+# INIT CHROME DRIVER — Render-safe, auto-recovers via pyppeteer
+# ================================================================
 def init_chrome_driver():
-    """Initialize a headless Chrome driver safely for Render environments."""
-    global driver, chromium_path
+    """Initialize a headless Chrome WebDriver using pyppeteer’s Chromium build."""
+    print("[INFO] Starting Chrome driver initialization...")
+
+    # Attempt to locate pyppeteer’s internal Chromium
+    chromium_path = chromium_downloader.chromium_executable()
+    print(f"[DEBUG] pyppeteer Chromium path candidate: {chromium_path}")
+
+    # If missing, download Chromium (stored under ~/.local/share/pyppeteer)
+    if not os.path.exists(chromium_path):
+        print("[WARN] pyppeteer Chromium not found — downloading...")
+        chromium_downloader.download_chromium()
+        chromium_path = chromium_downloader.chromium_executable()
+
+    # Install compatible chromedriver automatically
+    chromedriver_autoinstaller.install()
+
+    # Chrome launch options
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1280,800")
+    options.binary_location = chromium_path
+
+    print(f"[INFO] Using Chromium binary at: {options.binary_location}")
+
     try:
-        if driver:
-            return driver
-
-        print("[INFO] Checking for existing Chrome driver...")
-
-        # Use pyppeteer to ensure a Chromium binary exists
-        chromium_revision = chromium_downloader.REVISION
-        chromium_exe = chromium_downloader.chromium_executable()
-        if not os.path.exists(chromium_exe):
-            print("[INFO] Chromium not found, downloading...")
-            chromium_downloader.download_chromium()
-        chromium_path = chromium_exe
-
-        print(f"[INFO] Using Chromium binary at: {chromium_path}")
-
-        # Install chromedriver automatically
-        chromedriver_autoinstaller.install()
-
-        chrome_options = Options()
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--disable-software-rasterizer")
-        chrome_options.add_argument("--disable-dev-tools")
-        chrome_options.add_argument("--remote-debugging-port=9222")
-        chrome_options.binary_location = chromium_path
-
         service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-
+        driver = webdriver.Chrome(service=service, options=options)
         print("[INFO] Chrome driver initialized successfully.")
         return driver
-
     except Exception as e:
         print(f"[ERROR] Chrome failed to start: {e}")
-        raise HTTPException(status_code=500, detail=f"Chrome could not start in current environment: {e}")
+        raise RuntimeError(f"500: Chrome could not start in current environment: {e}")
 
 
-# -----------------------------------------------------------------------------
-# HEALTH CHECK ENDPOINT
-# -----------------------------------------------------------------------------
-@app.get("/mcp/health")
-def health_check():
-    """Confirm Selenium driver availability."""
-    global driver
-    try:
-        if driver is None:
-            init_chrome_driver()
-            return {"status": "ok", "message": "Selenium driver initialized"}
-        else:
-            _ = driver.title  # Touch driver
-            return {"status": "ok", "message": "Selenium driver alive"}
-    except Exception as e:
-        return {"status": "down", "message": f"Driver not initialized: {str(e)}"}
+# ================================================================
+# GET DRIVER — resilient wrapper
+# ================================================================
+def get_driver():
+    """Return a live Chrome driver or restart if it crashed."""
+    global _driver
+
+    def _alive(d):
+        try:
+            _ = d.title
+            return True
+        except Exception:
+            return False
+
+    if _driver is None:
+        print("[INFO] Creating new Chrome driver...")
+        _driver = init_chrome_driver()
+    elif not _alive(_driver):
+        print("[WARN] Chrome driver unresponsive — restarting...")
+        try:
+            _driver.quit()
+        except Exception:
+            pass
+        _driver = init_chrome_driver()
+
+    return _driver
 
 
-# -----------------------------------------------------------------------------
-# SCHEMA ENDPOINT
-# -----------------------------------------------------------------------------
+# ================================================================
+# FASTAPI ENDPOINTS
+# ================================================================
+@app.get("/")
+def home():
+    return {"status": "ok", "message": "Selenium MCP Server online"}
+
+
 @app.get("/mcp/schema")
-def get_schema():
-    """Return MCP-compliant schema for Agent Builder autodiscovery."""
-    schema = {
+def mcp_schema():
+    """Advertise available tools for OpenAI Agent Builder."""
+    return {
         "version": "2025-10-01",
         "tools": [
             {
@@ -187,7 +129,7 @@ def get_schema():
             },
             {
                 "name": "selenium_screenshot",
-                "description": "Save a PNG screenshot and return its path",
+                "description": "Save a PNG screenshot to ./screenshots and return its path",
                 "parameters": {
                     "type": "object",
                     "properties": {"filename": {"type": "string"}},
@@ -196,114 +138,82 @@ def get_schema():
             },
         ],
     }
-    return schema
 
 
-# -----------------------------------------------------------------------------
-# DEBUG ENDPOINT
-# -----------------------------------------------------------------------------
-@app.get("/mcp/debug")
-def debug_info():
-    """Return detailed environment diagnostics."""
-    global chromium_path
-    info = {
-        "cwd": os.getcwd(),
-        "home": os.path.expanduser("~"),
-        "python_version": sys.version,
-        "platform": platform.platform(),
-        "env_PATH": os.getenv("PATH"),
-        "chromium_executable": chromium_path,
-        "chromium_exists": os.path.exists(chromium_path) if chromium_path else False,
-        "chromium_permissions": (
-            oct(os.stat(chromium_path).st_mode)[-3:]
-            if chromium_path and os.path.exists(chromium_path)
-            else None
-        ),
-    }
-    return info
-
-
-# -----------------------------------------------------------------------------
-# INVOCATION ENDPOINT (MAIN MCP TOOL HANDLER)
-# -----------------------------------------------------------------------------
-class ToolRequest(BaseModel):
+class InvokeBody(BaseModel):
     tool: str
     arguments: dict
 
 
 @app.post("/mcp/invoke")
-def mcp_invoke(req: ToolRequest):
-    """Execute a supported Selenium MCP tool."""
-    global driver
+def mcp_invoke(body: InvokeBody):
+    """Handle tool calls from OpenAI Agent Builder."""
+    global _driver
     try:
-        if driver is None:
-            driver = init_chrome_driver()
+        driver = get_driver()
 
-        if req.tool == "selenium_open_page":
-            url = req.arguments["url"]
+        if body.tool == "selenium_open_page":
+            url = body.arguments["url"]
             print(f"[INFO] Opening page: {url}")
             driver.get(url)
-            title = driver.title
-            return {"ok": True, "url": url, "title": title}
+            time.sleep(2)
+            return {"ok": True, "url": url}
 
-        elif req.tool == "selenium_click":
-            sel = req.arguments["selector"]
-            el = driver.find_element("css selector", sel)
-            el.click()
-            return {"ok": True, "selector": sel}
+        elif body.tool == "selenium_click":
+            sel = body.arguments["selector"]
+            element = driver.find_element(By.CSS_SELECTOR, sel)
+            element.click()
+            return {"ok": True, "clicked": sel}
 
-        elif req.tool == "selenium_text":
-            sel = req.arguments["selector"]
-            el = driver.find_element("css selector", sel)
-            return {"ok": True, "selector": sel, "text": el.text}
+        elif body.tool == "selenium_text":
+            sel = body.arguments["selector"]
+            text = driver.find_element(By.CSS_SELECTOR, sel).text
+            return {"ok": True, "selector": sel, "text": text}
 
-        elif req.tool == "selenium_screenshot":
-            fn = req.arguments["filename"]
-            os.makedirs("./screenshots", exist_ok=True)
-            path = os.path.join("./screenshots", fn)
+        elif body.tool == "selenium_screenshot":
+            filename = body.arguments["filename"]
+            os.makedirs("screenshots", exist_ok=True)
+            path = os.path.join("screenshots", filename)
             driver.save_screenshot(path)
-            return {"ok": True, "filename": path}
+            return {"ok": True, "path": path}
 
         else:
-            raise HTTPException(status_code=400, detail=f"Unknown tool: {req.tool}")
+            raise HTTPException(status_code=404, detail=f"Unknown tool: {body.tool}")
 
     except Exception as e:
         print(f"[ERROR] Exception during tool invocation: {e}")
-        traceback.print_exc()
+        try:
+            if _driver:
+                _driver.quit()
+        except Exception:
+            pass
+        _driver = None
         raise HTTPException(status_code=500, detail=f"Recovered from Chrome failure: {e}")
 
 
-# -----------------------------------------------------------------------------
-# ROOT ENDPOINT
-# -----------------------------------------------------------------------------
-@app.get("/")
-def index():
-    return {
-        "status": "running",
-        "service": "Selenium MCP",
-        "schema": "/mcp/schema",
-        "docs": "/docs",
+@app.get("/mcp/health")
+def mcp_health():
+    """Simple health endpoint to confirm Selenium is alive."""
+    global _driver
+    try:
+        if _driver is None:
+            return {"status": "down", "message": "Driver not initialized"}
+        _ = _driver.title
+        return {"status": "ok", "message": "Selenium driver alive"}
+    except Exception as e:
+        return {"status": "down", "message": f"Driver error: {e}"}
+
+
+@app.get("/mcp/debug")
+def mcp_debug():
+    """Diagnostics for Render sandbox environment."""
+    env = {
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "cwd": os.getcwd(),
+        "home": os.environ.get("HOME"),
+        "path": os.environ.get("PATH"),
+        "chromium_exec": chromium_downloader.chromium_executable(),
+        "chrome_exists": os.path.exists(chromium_downloader.chromium_executable()),
     }
-
-
-# -----------------------------------------------------------------------------
-# ENTRYPOINT
-# -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    import threading
-    import uvicorn
-    from pyppeteer import chromium_downloader
-
-    # Start background thread to cache Chromium after app starts
-    def warmup_chromium():
-        try:
-            print("[INIT] Background Chromium warmup started.")
-            chromium_downloader.download_chromium()
-            print("[INIT] Chromium cached successfully.")
-        except Exception as e:
-            print(f"[WARN] Chromium warmup failed: {e}")
-
-    threading.Thread(target=warmup_chromium, daemon=True).start()
-
-    # Start FastAPI server immediately
-    uvicorn.run("server:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    return json.loads(json.dumps(env, indent=2))
