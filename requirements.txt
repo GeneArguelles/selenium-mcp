@@ -5,4 +5,4 @@ selenium>=4.22
 webdriver-manager>=4.0
 undetected-chromedriver>=3.5.5
 chromedriver-binary-auto>=0.3.1
-undetected-chromedriver-patched>=3.5.6
+setuptools>=69.0
