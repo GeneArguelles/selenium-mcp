@@ -11,16 +11,24 @@ app = FastAPI(title="Selenium MCP Server")
 
 # ---------- Driver init ----------
 def init_chrome_driver():
-    """Initialize headless Chrome in Render sandbox."""
-    print("[INFO] Initializing Chrome driver...")
+    """Initialize ChromeDriver using pyppeteer Chromium and chromedriver-binary-auto."""
+    import os, shutil, subprocess
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.chrome.options import Options
+    import pyppeteer.chromium_downloader as chromium_downloader
+    import chromedriver_binary_auto  # noqa: F401  <- ensures driver is on PATH
 
-    # Locate / download Chromium
+    print("[INFO] Initializing Chrome via chromedriver-binary-auto...")
+
+    # Step 1: Get Chromium binary
     chromium_path = chromium_downloader.chromium_executable()
     if not os.path.exists(chromium_path):
+        print("[WARN] No Chromium found, downloading...")
         chromium_downloader.download_chromium()
         chromium_path = chromium_downloader.chromium_executable()
 
-    # Relocate to /tmp to make executable
+    # Step 2: Relocate to /tmp for permissions
     tmp_dir = "/tmp/chromium"
     os.makedirs(tmp_dir, exist_ok=True)
     relocated_path = os.path.join(tmp_dir, "chrome")
@@ -28,18 +36,11 @@ def init_chrome_driver():
         shutil.copy2(chromium_path, relocated_path)
         os.chmod(relocated_path, 0o755)
 
-    # Verify Chromium runs
-    result = subprocess.run(
-        [relocated_path, "--version"], capture_output=True, text=True
-    )
-    print(f"[INFO] Using {result.stdout.strip()}")
+    # Step 3: Verify Chromium
+    result = subprocess.run([relocated_path, "--version"], capture_output=True, text=True)
+    print(f"[INFO] Chromium binary: {result.stdout.strip()}")
 
-    # Install ChromeDriver & locate
-    chromedriver_autoinstaller.install()
-    chromedriver_path = chromedriver_autoinstaller.get_chromedriver_path()
-    print(f"[INFO] ChromeDriver path: {chromedriver_path}")
-
-    # Selenium options
+    # Step 4: Configure Chrome options
     options = Options()
     options.binary_location = relocated_path
     options.add_argument("--headless=new")
@@ -48,15 +49,22 @@ def init_chrome_driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,800")
 
-    # Explicitly start with verified paths
+    # Step 5: Explicitly use the auto-installed chromedriver
+    chromedriver_path = shutil.which("chromedriver")
+    if not chromedriver_path:
+        raise RuntimeError("chromedriver-binary-auto did not expose chromedriver on PATH.")
+    print(f"[INFO] Using chromedriver at: {chromedriver_path}")
+
+    # Step 6: Start Selenium
     service = Service(executable_path=chromedriver_path)
     try:
         driver = webdriver.Chrome(service=service, options=options)
         print("[INFO] ✅ ChromeDriver initialized successfully.")
         return driver
     except Exception as e:
-        print(f"[ERROR] ❌ Chrome failed to start: {e}")
+        print(f"[ERROR] Chrome start failed: {e}")
         raise RuntimeError(f"500: Chrome could not start: {e}")
+
 
 # ---------- API Models ----------
 class InvokePayload(BaseModel):
