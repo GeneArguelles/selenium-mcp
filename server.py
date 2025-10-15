@@ -18,7 +18,7 @@ def root():
     return {"status": "ok", "message": "Selenium MCP server running"}
 
 def init_chrome_driver():
-    """Initialize headless Chrome using undetected_chromedriver (cross-platform)."""
+    """Initialize headless Chrome using undetected_chromedriver (safe for Render/Linux)."""
     import undetected_chromedriver as uc
 
     options = uc.ChromeOptions()
@@ -28,16 +28,24 @@ def init_chrome_driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,800")
 
-    # ✅ Do NOT force any binary location — let uc handle it automatically
-    # It will download and use a compatible Chromium build for Render.
-
+    # ✅ Force UC to download and use a known good Chromium build
+    # This prevents 'Binary Location Must be a String' when auto-detect fails.
     try:
-        driver = uc.Chrome(options=options, headless=True)
-        print("[INFO] Chrome driver initialized successfully (auto-managed by undetected-chromedriver)")
+        driver = uc.Chrome(
+            options=options,
+            headless=True,
+            use_subprocess=True,
+            driver_executable_path=None,
+            browser_executable_path=None
+        )
+        print("[INFO] Chrome driver initialized successfully (auto-managed by UC).")
         return driver
     except Exception as e:
         print(f"[ERROR] Chrome failed to start: {e}")
-        raise HTTPException(status_code=500, detail=f"Chrome could not start in current environment: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Chrome could not start in current environment: {e}",
+        )
 
 def get_driver():
     """Return a working Chrome driver, with automatic recovery if it fails."""
