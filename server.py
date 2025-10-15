@@ -20,34 +20,50 @@ _driver = None
 # ================================================================
 # INIT CHROME DRIVER — Render-safe, auto-recovers via pyppeteer
 # ================================================================
+
 def init_chrome_driver():
-    """Initialize a headless Chrome WebDriver using pyppeteer’s Chromium build."""
+    """Initialize headless Chrome driver that works in Render sandbox."""
+    import os, stat
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.chrome.options import Options
+    from webdriver_manager.chrome import ChromeDriverManager
+    import pyppeteer.chromium_downloader as chromium_downloader
+    import chromedriver_autoinstaller
+
     print("[INFO] Starting Chrome driver initialization...")
 
-    # Attempt to locate pyppeteer’s internal Chromium
+    # Step 1: Try to locate pyppeteer Chromium
     chromium_path = chromium_downloader.chromium_executable()
-    print(f"[DEBUG] pyppeteer Chromium path candidate: {chromium_path}")
+    print(f"[DEBUG] Candidate Chromium path: {chromium_path}")
 
-    # If missing, download Chromium (stored under ~/.local/share/pyppeteer)
+    # Step 2: If missing, download it
     if not os.path.exists(chromium_path):
-        print("[WARN] pyppeteer Chromium not found — downloading...")
+        print("[WARN] Chromium not found — downloading...")
         chromium_downloader.download_chromium()
         chromium_path = chromium_downloader.chromium_executable()
 
-    # Install compatible chromedriver automatically
+    # Step 3: Ensure it is executable
+    if os.path.exists(chromium_path):
+        st = os.stat(chromium_path)
+        os.chmod(chromium_path, st.st_mode | stat.S_IEXEC)
+        print(f"[INFO] Chromium binary ready: {chromium_path}")
+    else:
+        raise RuntimeError(f"Chromium binary not found at {chromium_path}")
+
+    # Step 4: Install ChromeDriver
     chromedriver_autoinstaller.install()
 
-    # Chrome launch options
+    # Step 5: Configure Selenium options
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1280,800")
-    options.binary_location = chromium_path
+    options.binary_location = chromium_path  # Explicitly set!
 
-    print(f"[INFO] Using Chromium binary at: {options.binary_location}")
-
+    # Step 6: Start ChromeDriver service
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
@@ -56,7 +72,6 @@ def init_chrome_driver():
     except Exception as e:
         print(f"[ERROR] Chrome failed to start: {e}")
         raise RuntimeError(f"500: Chrome could not start in current environment: {e}")
-
 
 # ================================================================
 # GET DRIVER — resilient wrapper
@@ -206,14 +221,34 @@ def mcp_health():
 
 @app.get("/mcp/debug")
 def mcp_debug():
-    """Diagnostics for Render sandbox environment."""
-    env = {
-        "python_version": platform.python_version(),
-        "platform": platform.platform(),
-        "cwd": os.getcwd(),
-        "home": os.environ.get("HOME"),
-        "path": os.environ.get("PATH"),
-        "chromium_exec": chromium_downloader.chromium_executable(),
-        "chrome_exists": os.path.exists(chromium_downloader.chromium_executable()),
-    }
-    return json.loads(json.dumps(env, indent=2))
+    """Diagnostics for Render sandbox environment (never crashes)."""
+    import traceback
+
+    info = {}
+    try:
+        info["python_version"] = platform.python_version()
+        info["platform"] = platform.platform()
+        info["cwd"] = os.getcwd()
+        info["home"] = os.environ.get("HOME")
+        info["path_env"] = os.environ.get("PATH")
+
+        # Safely test pyppeteer chromium path
+        try:
+            chromium_exec = chromium_downloader.chromium_executable()
+            info["chromium_exec"] = chromium_exec
+            info["chrome_exists"] = os.path.exists(chromium_exec)
+        except Exception as e:
+            info["chromium_exec_error"] = str(e)
+            info["chrome_exists"] = False
+
+        # List a few candidate binaries visible on PATH
+        import shutil
+        info["which_chromium"] = shutil.which("chromium")
+        info["which_chrome"] = shutil.which("chrome")
+        info["which_google_chrome"] = shutil.which("google-chrome")
+        info["which_chromedriver"] = shutil.which("chromedriver")
+
+    except Exception:
+        info["fatal_error"] = traceback.format_exc()
+
+    return info
