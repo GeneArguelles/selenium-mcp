@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """
-Selenium MCP Server — Render-ready + Agent Builder compatible
-• GET+POST /mcp/schema  → Tool discovery handshake
-• /mcp/ping             → Health check
-• /mcp/debug            → Environment inspection
-• /mcp/invoke           → Execute Selenium tool
-• /mcp/status           → Uptime & last-invocation monitor
+Selenium MCP Server — Render-Ready
+────────────────────────────────────────────
+Features:
+• ✅ /mcp/schema  — supports GET + POST (with server_info metadata)
+• ✅ /mcp/ping    — quick health probe
+• ✅ /mcp/status  — uptime + last invocation
+• ✅ /mcp/debug   — environment sanity report
+• ✅ /mcp/invoke  — runs selenium_open_page
+────────────────────────────────────────────
 """
 
 import os
 import sys
 import json
-import shutil
 import time
+import shutil
 import platform
 from pathlib import Path
 from datetime import datetime
@@ -21,40 +24,37 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from pyppeteer import chromium_downloader
 
 # ---------------------------------------------------------------------
-#  App initialization
+#  App & Global State
 # ---------------------------------------------------------------------
 app = FastAPI(title="Selenium MCP Server")
+start_time = time.time()
+last_invocation = "No tool executed yet."
 
-# Enable CORS (Agent Builder requires cross-origin)
+# Enable CORS so Agent Builder can call this service
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ---------------------------------------------------------------------
-#  Global state
-# ---------------------------------------------------------------------
-SERVER_START_TIME = time.time()
-LAST_INVOCATION = None
-
-
-# ---------------------------------------------------------------------
 #  Safe Chrome / Driver Initialization
 # ---------------------------------------------------------------------
 def init_chrome_driver():
-    """Initialize a headless Chromium driver in Render’s sandbox."""
+    """Initialize a headless Chromium driver, even in restricted environments."""
     try:
         chromium_exec = chromium_downloader.chromium_executable()
         if not os.path.exists(chromium_exec):
             print("[INFO] Chromium not found — downloading...")
             chromium_downloader.download_chromium()
 
-        # Relocate binary into /tmp (Render writable path)
+        # Relocate binary into /tmp (writable on Render)
         relocated_path = Path("/tmp/chromium/chrome")
         relocated_path.parent.mkdir(parents=True, exist_ok=True)
         if not relocated_path.exists():
@@ -77,25 +77,23 @@ def init_chrome_driver():
         print(f"[ERROR] Chrome failed to start: {e}")
         raise RuntimeError(f"500: Chrome could not start in current environment: {e}")
 
-
 # ---------------------------------------------------------------------
 #  Endpoints
 # ---------------------------------------------------------------------
-
-@app.get("/mcp/ping")
-async def ping():
-    """Simple health check for uptime monitoring."""
-    return {"status": "ok"}
-
+@app.get("/")
+async def root():
+    return {"message": "Selenium MCP Server is alive. Use /mcp/schema to discover tools."}
 
 @app.api_route("/mcp/schema", methods=["GET", "POST"])
 async def mcp_schema(request: Request):
-    """
-    Return MCP schema for OpenAI Agent Builder discovery.
-    Supports both GET and POST for handshake compatibility.
-    """
+    """Return MCP schema for OpenAI Agent Builder discovery."""
     schema = {
         "version": "2025-10-01",
+        "server_info": {
+            "name": "selenium_mcp_server",
+            "description": "Render-hosted Selenium MCP exposing a browser automation tool.",
+            "version": "1.0.0"
+        },
         "tools": [
             {
                 "name": "selenium_open_page",
@@ -103,90 +101,84 @@ async def mcp_schema(request: Request):
                 "parameters": {
                     "type": "object",
                     "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
-                },
+                    "required": ["url"]
+                }
             }
-        ],
+        ]
     }
     return JSONResponse(content=schema)
 
+@app.get("/mcp/ping")
+async def mcp_ping():
+    """Simple heartbeat endpoint."""
+    return {"status": "ok"}
+
+@app.get("/mcp/status")
+async def mcp_status():
+    """Return uptime and last invocation."""
+    uptime = round(time.time() - start_time, 2)
+    return {
+        "status": "running",
+        "uptime_seconds": uptime,
+        "last_invocation": last_invocation,
+        "server_time": datetime.utcnow().isoformat()
+    }
+
+@app.get("/mcp/debug")
+async def mcp_debug():
+    """Environment diagnostics for Render sandbox sanity check."""
+    chromium_exec = chromium_downloader.chromium_executable()
+    relocated_path = "/tmp/chromium/chrome"
+    result = {
+        "python_version": sys.version.split()[0],
+        "platform": platform.platform(),
+        "cwd": os.getcwd(),
+        "home": os.getenv("HOME"),
+        "path_env": os.getenv("PATH"),
+        "chromium_exec": chromium_exec,
+        "chrome_exists": os.path.exists(chromium_exec),
+        "relocated_path": relocated_path,
+        "relocated_exists": os.path.exists(relocated_path),
+        "which_chromedriver": shutil.which("chromedriver"),
+        "which_chrome": shutil.which("chrome"),
+        "which_chromium": shutil.which("chromium"),
+    }
+    return JSONResponse(content=result)
 
 @app.post("/mcp/invoke")
 async def mcp_invoke(request: Request):
-    """Handle invocation of a registered MCP tool."""
-    global LAST_INVOCATION
+    """Execute an MCP tool invocation."""
+    global last_invocation
     try:
-        data = await request.json()
-        tool = data.get("tool")
-        args = data.get("arguments", {})
+        payload = await request.json()
+        tool = payload.get("tool")
+        args = payload.get("arguments", {})
 
         if tool == "selenium_open_page":
             url = args.get("url")
             if not url:
-                return JSONResponse(status_code=400, content={"detail": "Missing 'url' argument."})
+                return JSONResponse(status_code=400, content={"error": "Missing URL argument"})
 
-            print(f"[INFO] Opening page: {url}")
             driver = init_chrome_driver()
             driver.get(url)
             title = driver.title
             driver.quit()
 
-            LAST_INVOCATION = {
-                "tool": tool,
-                "url": url,
-                "title": title,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-
+            last_invocation = f"selenium_open_page({url}) @ {datetime.utcnow().isoformat()}"
             return {"ok": True, "url": url, "title": title}
 
         else:
-            return JSONResponse(status_code=404, content={"detail": f"Unknown tool: {tool}"})
+            return JSONResponse(status_code=400, content={"error": f"Unknown tool '{tool}'"})
 
     except Exception as e:
+        last_invocation = f"Failed: {e}"
         print(f"[ERROR] Exception during tool invocation: {e}")
-        return JSONResponse(status_code=500, content={"detail": f"Recovered from Chrome failure: {e}"})
+        return JSONResponse(status_code=500, content={"detail": str(e)})
 
-
-@app.get("/mcp/debug")
-async def debug():
-    """Expose environment paths and Chrome availability for Render sandbox sanity checks."""
-    try:
-        chromium_exec = chromium_downloader.chromium_executable()
-        exists = os.path.exists(chromium_exec)
-        relocated_path = "/tmp/chromium/chrome"
-        relocated_exists = os.path.exists(relocated_path)
-        which_driver = shutil.which("chromedriver")
-
-        result = {
-            "python_version": sys.version.split()[0],
-            "platform": platform.platform(),
-            "cwd": os.getcwd(),
-            "home": str(Path.home()),
-            "path_env": os.environ.get("PATH"),
-            "chromium_exec": chromium_exec,
-            "chrome_exists": exists,
-            "relocated_path": relocated_path,
-            "relocated_exists": relocated_exists,
-            "which_chromedriver": which_driver,
-        }
-        return result
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@app.get("/mcp/status")
-async def status():
-    """Return uptime and last invocation details."""
-    uptime = round(time.time() - SERVER_START_TIME, 2)
-    return {
-        "status": "running",
-        "uptime_seconds": uptime,
-        "last_invocation": LAST_INVOCATION or "No tool executed yet.",
-        "server_time": datetime.utcnow().isoformat(),
-    }
-
-
-@app.get("/")
-async def root():
-    return {"message": "Selenium MCP Server is live."}
+# ---------------------------------------------------------------------
+#  Entry Point
+# ---------------------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    print("[INFO] Starting Selenium MCP Server...")
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
