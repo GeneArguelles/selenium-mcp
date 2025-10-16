@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # ============================================================
-# server.py — Render-safe Selenium MCP Server (Auto Chrome Detect)
+# server.py — Selenium MCP Server with runtime Chrome fetch
 # ============================================================
 
 import os
 import time
+import subprocess
+import tarfile
+import tempfile
+import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from selenium import webdriver
@@ -18,45 +22,73 @@ last_invocation = "No tool executed yet."
 
 
 # ============================================================
-# Detect Chrome binary dynamically
+# Download and extract Chrome for Testing at runtime
 # ============================================================
 
-def find_chrome_binary():
-    possible_paths = [
-        "/usr/bin/google-chrome",
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/opt/google/chrome/google-chrome",
-        "/app/.apt/usr/bin/google-chrome",
-        "/app/.apt/usr/bin/chromium-browser",
-        "/usr/local/bin/chromium",
-        "/usr/local/bin/google-chrome",
-    ]
-    for path in possible_paths:
-        if os.path.exists(path):
-            print(f"[INFO] Found Chrome binary at: {path}")
-            return path
-    print("[WARN] No Chrome binary found in standard paths.")
-    return None
+def download_chrome_runtime():
+    """Download a portable Chrome build into /tmp/chrome if not present."""
+    chrome_dir = "/tmp/chrome"
+    chrome_bin = os.path.join(chrome_dir, "chrome")
+
+    if os.path.exists(chrome_bin):
+        print(f"[INFO] Reusing existing Chrome binary at {chrome_bin}")
+        return chrome_bin
+
+    print("[INFO] Downloading Chrome for Testing runtime...")
+    url = (
+        "https://storage.googleapis.com/chrome-for-testing-public/120.0.6099.109/"
+        "linux64/chrome-linux64.zip"
+    )
+    zip_path = os.path.join(tempfile.gettempdir(), "chrome.zip")
+
+    # download zip
+    r = requests.get(url, stream=True)
+    r.raise_for_status()
+    with open(zip_path, "wb") as f:
+        for chunk in r.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+    # extract zip
+    os.makedirs(chrome_dir, exist_ok=True)
+    subprocess.run(["unzip", "-o", zip_path, "-d", chrome_dir], check=True)
+
+    chrome_path = os.path.join(chrome_dir, "chrome-linux64", "chrome")
+    if not os.path.exists(chrome_path):
+        raise RuntimeError("Failed to extract Chrome binary.")
+
+    # symlink to /tmp/chrome/chrome for consistent path
+    os.symlink(chrome_path, chrome_bin)
+    print(f"[INFO] Chrome downloaded to {chrome_bin}")
+    return chrome_bin
 
 
 # ============================================================
-# Initialize Chrome driver using WebDriverManager
+# Initialize Chrome driver
 # ============================================================
 
 def init_chrome_driver():
     """
     Initialize headless Chrome safely on Render.
-    Automatically finds Chrome binary and matching driver.
+    Uses Chrome-for-Testing runtime if system Chrome missing.
     """
     chrome_opts = Options()
-    chrome_path = find_chrome_binary()
+    chrome_path = None
 
-    if chrome_path:
-        chrome_opts.binary_location = chrome_path
-    else:
-        raise RuntimeError("500: No Chrome binary found in environment.")
+    # Try common system paths first
+    for path in [
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+    ]:
+        if os.path.exists(path):
+            chrome_path = path
+            break
 
+    # Otherwise fetch runtime build
+    if not chrome_path:
+        chrome_path = download_chrome_runtime()
+
+    chrome_opts.binary_location = chrome_path
     chrome_opts.add_argument("--headless=new")
     chrome_opts.add_argument("--no-sandbox")
     chrome_opts.add_argument("--disable-dev-shm-usage")
@@ -64,8 +96,8 @@ def init_chrome_driver():
     chrome_opts.add_argument("--disable-software-rasterizer")
     chrome_opts.add_argument("--window-size=1920,1080")
 
+    print(f"[INFO] Launching Chrome from {chrome_path}")
     try:
-        print("[INFO] Launching headless Chrome with WebDriverManager...")
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_opts)
         print("[INFO] Chrome successfully started.")
@@ -76,39 +108,37 @@ def init_chrome_driver():
 
 
 # ============================================================
-# MCP Endpoints
+# MCP Routes
 # ============================================================
 
 @app.get("/")
 async def root():
-    return {"message": "Selenium MCP Server is running on Render."}
+    return {"message": "Selenium MCP Server (runtime Chrome) is live."}
 
 
 @app.get("/mcp/ping")
-async def mcp_ping():
+async def ping():
     return {"status": "ok"}
 
 
 @app.post("/mcp/schema")
-async def mcp_schema():
+async def schema():
     return {
         "version": "2025-10-01",
         "server_info": {
             "type": "mcp",
             "name": "selenium_mcp_server",
-            "description": "Render-hosted MCP exposing a headless browser automation tool.",
-            "version": "1.0.0",
+            "description": "Render-hosted MCP with runtime Chrome download.",
+            "version": "1.1.0",
             "runtime": "3.11.9",
         },
         "tools": [
             {
                 "name": "selenium_open_page",
-                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "description": "Open a URL in headless Chrome and return the title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "url": {"type": "string"},
-                    },
+                    "properties": {"url": {"type": "string"}},
                     "required": ["url"],
                 },
             }
@@ -117,7 +147,7 @@ async def mcp_schema():
 
 
 @app.post("/mcp/invoke")
-async def mcp_invoke(request: Request):
+async def invoke(request: Request):
     global last_invocation
     try:
         body = await request.json()
@@ -127,9 +157,7 @@ async def mcp_invoke(request: Request):
         if tool == "selenium_open_page":
             url = args.get("url")
             if not url:
-                return JSONResponse(
-                    {"detail": "Missing required argument: 'url'"}, status_code=400
-                )
+                return JSONResponse({"detail": "Missing 'url'."}, 400)
 
             driver = init_chrome_driver()
             driver.get(url)
@@ -139,18 +167,14 @@ async def mcp_invoke(request: Request):
             last_invocation = f"selenium_open_page → {url}"
             return {"ok": True, "url": url, "title": title}
 
-        return JSONResponse({"detail": f"Unknown tool: {tool}"}, status_code=400)
-
+        return JSONResponse({"detail": f"Unknown tool {tool}"}, 400)
     except Exception as e:
         last_invocation = f"Failed: {e}"
-        return JSONResponse(
-            {"detail": f"500: Chrome could not start in current environment: {e}"},
-            status_code=500,
-        )
+        return JSONResponse({"detail": f"500: Chrome could not start in current environment: {e}"}, 500)
 
 
 @app.get("/mcp/status")
-async def mcp_status():
+async def status():
     uptime = round(time.time() - start_time, 2)
     return {
         "status": "running",
@@ -161,11 +185,10 @@ async def mcp_status():
 
 
 # ============================================================
-# Launch entry point
+# Launch
 # ============================================================
 
 if __name__ == "__main__":
     import uvicorn
-    print("[INFO] Launching MCP Server...")
+    print("[INFO] Launching Selenium MCP Server...")
     uvicorn.run(app, host="0.0.0.0", port=10000)
-
