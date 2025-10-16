@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 Render-safe Selenium MCP Server
-Auto-detects and version-matches Chrome + ChromeDriver
+Auto-detects and version-matches Chrome + ChromeDriver (no 'latest' string)
 """
 
 import os
 import time
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse, HTMLResponse
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -35,7 +35,7 @@ class InvokeRequest(BaseModel):
     arguments: dict
 
 # ======================================================
-# Logging Utilities
+# Helper
 # ======================================================
 
 def log(msg: str):
@@ -131,10 +131,10 @@ async def mcp_invoke(request: InvokeRequest):
         log(f"Launching Chrome via binary: {CHROME_BINARY}")
 
         # --------------------------------------------------
-        # Match ChromeDriver version to installed Chrome
+        # Auto-resolve the correct ChromeDriver version
         # --------------------------------------------------
         log("Resolving ChromeDriver version automatically...")
-        service = Service(ChromeDriverManager(driver_version="latest").install())
+        service = Service(ChromeDriverManager().install())
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
@@ -146,7 +146,10 @@ async def mcp_invoke(request: InvokeRequest):
 
     except Exception as e:
         LAST_INVOCATION = f"Failed: {str(e)}"
-        return JSONResponse(status_code=500, content={"detail": f"500: Chrome could not start in current environment: {str(e)}"})
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"500: Chrome could not start in current environment: {str(e)}"},
+        )
 
 # ======================================================
 # Startup
