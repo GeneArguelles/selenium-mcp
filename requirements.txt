@@ -2,6 +2,6 @@ fastapi>=0.110
 uvicorn>=0.30
 pydantic>=2.7
 selenium>=4.22
-chromedriver-binary-auto>=0.3.1
 webdriver-manager>=4.0
 pyppeteer>=2.0.0
+chromedriver-binary-auto==0.3.1
