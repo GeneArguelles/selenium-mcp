@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Selenium MCP Server — Final-Final Render + Agent Builder Compliant Version
+Selenium MCP Server — Render-Stable + Agent Builder Compliant Version
 ────────────────────────────────────────────────────────────────────────────
-Implements full Model Context Protocol support for OpenAI Agent Builder:
-• POST /                 – MCP handshake (includes "type": "mcp_server")
+Features:
+• POST /                 – MCP handshake ("type": "mcp_server")
 • /mcp/schema (GET+POST) – Tool discovery
 • /mcp/invoke            – Executes Selenium headless task
 • /mcp/ping              – Health probe
@@ -48,7 +48,7 @@ app.add_middleware(
 #   Safe Chrome / Driver Initialization
 # ─────────────────────────────────────────────────────────────
 def init_chrome_driver():
-    """Initialize a headless Chromium driver (safe for Render sandbox)."""
+    """Initialize a headless Chromium driver (stable for Render sandbox)."""
     try:
         chromium_exec = chromium_downloader.chromium_executable()
         if not os.path.exists(chromium_exec):
@@ -64,12 +64,25 @@ def init_chrome_driver():
 
         print(f"[INFO] Using Chromium binary: {relocated_path}")
 
+        # 🧩 Stable Headless Options for Render / Heroku / Docker
         chrome_opts = Options()
         chrome_opts.binary_location = str(relocated_path)
         chrome_opts.add_argument("--headless=new")
         chrome_opts.add_argument("--no-sandbox")
         chrome_opts.add_argument("--disable-dev-shm-usage")
         chrome_opts.add_argument("--disable-gpu")
+        chrome_opts.add_argument("--disable-software-rasterizer")
+        chrome_opts.add_argument("--disable-features=VizDisplayCompositor")
+        chrome_opts.add_argument("--remote-debugging-port=9222")
+        chrome_opts.add_argument("--window-size=1280,720")
+        chrome_opts.add_argument("--disable-extensions")
+        chrome_opts.add_argument("--disable-translate")
+        chrome_opts.add_argument("--disable-background-networking")
+        chrome_opts.add_argument("--disable-sync")
+        chrome_opts.add_argument("--disable-web-security")
+        chrome_opts.add_argument("--disable-default-apps")
+        chrome_opts.add_argument("--mute-audio")
+        chrome_opts.add_argument("--user-data-dir=/tmp/chrome-user-data")  # ✅ Critical
 
         driver = webdriver.Chrome(options=chrome_opts)
         return driver
