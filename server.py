@@ -18,7 +18,7 @@ from selenium.webdriver.chrome.options import Options
 from pydantic import BaseModel
 import uvicorn
 
-app = FastAPI(title="Selenium MCP Server", version="1.0.0")
+app = FastAPI(title="Selenium MCP Server", version="1.0.2")
 
 # ======================================================
 # Configuration
@@ -29,7 +29,6 @@ CHROME_BINARY = os.getenv(
 )
 PORT = int(os.getenv("PORT", "10000"))
 CHROMEDRIVER_PATH = "/opt/render/project/src/.local/chromedriver/chromedriver"
-
 os.makedirs(os.path.dirname(CHROMEDRIVER_PATH), exist_ok=True)
 
 # ======================================================
@@ -39,28 +38,58 @@ os.makedirs(os.path.dirname(CHROMEDRIVER_PATH), exist_ok=True)
 def log(msg: str):
     print(f"[INFO] {msg}", flush=True)
 
+# ======================================================
+# Chrome Version + Driver Sync
+# ======================================================
+
 def get_chrome_version():
+    """Return version string like '120.0.6099.18', or None if detection fails."""
     try:
+        # Ensure binary exists and is executable
+        if not os.path.exists(CHROME_BINARY):
+            log(f"[WARN] Chrome binary not found at {CHROME_BINARY}")
+            return None
+        os.chmod(CHROME_BINARY, 0o755)
+
         result = subprocess.run(
             [CHROME_BINARY, "--version"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            timeout=5,
         )
         version_str = result.stdout.strip()
+        if not version_str:
+            log(f"[WARN] Chrome version output empty. stderr: {result.stderr.strip()}")
+            return None
         log(f"Detected Chrome version: {version_str}")
-        return version_str.split()[2]  # e.g. "120.0.6099.18"
+        # Typical output: 'Chromium 120.0.6099.18'
+        version = version_str.split()[1]
+        return version
     except Exception as e:
         log(f"[WARN] Unable to detect Chrome version: {e}")
         return None
 
-def download_matching_chromedriver(version):
-    major_version = version.split(".")[0]
-    base_url = f"https://storage.googleapis.com/chrome-for-testing-public/{version}/linux64/chromedriver-linux64.zip"
-    fallback_url = f"https://storage.googleapis.com/chrome-for-testing-public/{major_version}.0.6099.18/linux64/chromedriver-linux64.zip"
 
-    for url in [base_url, fallback_url]:
-        log(f"Attempting to fetch ChromeDriver from: {url}")
+def download_matching_chromedriver(version):
+    """Download and extract the exact ChromeDriver matching the version."""
+    if not version:
+        log("[ERROR] No Chrome version detected. Skipping ChromeDriver download.")
+        return False
+
+    try:
+        major_version = version.split(".")[0]
+    except Exception:
+        log(f"[WARN] Invalid version format: {version}")
+        return False
+
+    urls = [
+        f"https://storage.googleapis.com/chrome-for-testing-public/{version}/linux64/chromedriver-linux64.zip",
+        f"https://storage.googleapis.com/chrome-for-testing-public/{major_version}.0.6099.18/linux64/chromedriver-linux64.zip",
+    ]
+
+    for url in urls:
+        log(f"Attempting ChromeDriver download from: {url}")
         try:
             resp = requests.get(url, timeout=20)
             if resp.status_code == 200:
@@ -68,9 +97,12 @@ def download_matching_chromedriver(version):
                     z.extractall(os.path.dirname(CHROMEDRIVER_PATH))
                 log("✅ ChromeDriver extracted successfully.")
                 return True
+            else:
+                log(f"[WARN] HTTP {resp.status_code} from {url}")
         except Exception as e:
             log(f"[WARN] ChromeDriver fetch failed: {e}")
     return False
+
 
 # ======================================================
 # Models
@@ -80,6 +112,7 @@ class InvokeRequest(BaseModel):
     tool: str
     arguments: dict
 
+
 # ======================================================
 # Root
 # ======================================================
@@ -88,6 +121,7 @@ class InvokeRequest(BaseModel):
 async def root():
     return "<h2>✅ Selenium MCP Server (auto-matching driver) is live!</h2>"
 
+
 # ======================================================
 # Ping
 # ======================================================
@@ -95,6 +129,7 @@ async def root():
 @app.get("/mcp/ping")
 async def ping():
     return {"status": "ok"}
+
 
 # ======================================================
 # Schema
@@ -108,7 +143,7 @@ async def schema():
             "type": "mcp",
             "name": "selenium_mcp_server",
             "description": "Render-hosted MCP exposing a headless browser automation tool.",
-            "version": "1.0.1",
+            "version": "1.0.2",
             "runtime": os.popen("python3 --version").read().strip(),
         },
         "tools": [
@@ -124,12 +159,14 @@ async def schema():
         ],
     }
 
+
 # ======================================================
 # Status
 # ======================================================
 
 START_TIME = time.time()
 LAST_INVOCATION = "No tool executed yet."
+
 
 @app.get("/mcp/status")
 async def status():
@@ -139,6 +176,7 @@ async def status():
         "last_invocation": LAST_INVOCATION,
         "server_time": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
+
 
 # ======================================================
 # Invoke
@@ -156,11 +194,10 @@ async def invoke(req: InvokeRequest):
         return JSONResponse(status_code=400, content={"detail": "Missing 'url'"})
 
     try:
-        # Ensure driver version match
         version = get_chrome_version()
         if not version or not os.path.exists(CHROMEDRIVER_PATH):
             if not download_matching_chromedriver(version):
-                raise RuntimeError("Failed to download matching ChromeDriver")
+                raise RuntimeError("Failed to download or detect matching ChromeDriver")
 
         chrome_options = Options()
         chrome_options.binary_location = CHROME_BINARY
@@ -169,6 +206,7 @@ async def invoke(req: InvokeRequest):
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
 
+        log(f"Starting Chrome using driver: {CHROMEDRIVER_PATH}")
         service = Service(CHROMEDRIVER_PATH)
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get(url)
@@ -185,15 +223,18 @@ async def invoke(req: InvokeRequest):
             content={"detail": f"500: Chrome could not start in current environment: {str(e)}"},
         )
 
+
 # ======================================================
 # Startup
 # ======================================================
 
 if __name__ == "__main__":
-    log("Starting Render-safe Selenium MCP Server (auto-matching ChromeDriver)...")
+    log("Starting Render-safe Selenium MCP Server (resilient version detection)...")
     version = get_chrome_version()
     if version:
         download_matching_chromedriver(version)
+    else:
+        log("[WARN] Chrome version undetectable; driver download skipped.")
     log(f"Using Chrome binary: {CHROME_BINARY}")
     log(f"Python runtime: {os.popen('python3 --version').read().strip()}")
     log(f"Binding to PORT={PORT} ...")
