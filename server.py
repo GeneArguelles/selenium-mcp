@@ -48,43 +48,56 @@ app.add_middleware(
 #   Safe Chrome / Driver Initialization
 # ─────────────────────────────────────────────────────────────
 def init_chrome_driver():
-    """Initialize a headless Chromium driver (stable for Render sandbox)."""
+    """Initialize a headless Chrome driver that works in Render sandbox."""
     try:
-        chromium_exec = chromium_downloader.chromium_executable()
-        if not os.path.exists(chromium_exec):
-            print("[INFO] Chromium not found — downloading...")
-            chromium_downloader.download_chromium()
+        # Prefer system / chromedriver-binary-auto Chrome
+        candidates = [
+            shutil.which("google-chrome"),
+            shutil.which("chrome"),
+            shutil.which("chromium"),
+            "/usr/bin/google-chrome",
+            "/usr/bin/chromium",
+            "/opt/google/chrome/chrome"
+        ]
+        chrome_bin = next((p for p in candidates if p and os.path.exists(p)), None)
 
-        # Copy to writable /tmp path (Render restriction workaround)
+        # If none exist, fall back to pyppeteer download
+        if not chrome_bin:
+            from pyppeteer import chromium_downloader
+            chromium_exec = chromium_downloader.chromium_executable()
+            if not os.path.exists(chromium_exec):
+                print("[INFO] Downloading fallback Chromium…")
+                chromium_downloader.download_chromium()
+            chrome_bin = chromium_exec
+
+        # Copy into /tmp for write permissions
         relocated_path = Path("/tmp/chromium/chrome")
         relocated_path.parent.mkdir(parents=True, exist_ok=True)
         if not relocated_path.exists():
-            shutil.copy2(chromium_exec, relocated_path)
+            shutil.copy2(chrome_bin, relocated_path)
             os.chmod(relocated_path, 0o755)
 
-        print(f"[INFO] Using Chromium binary: {relocated_path}")
+        print(f"[INFO] Using Chrome binary: {relocated_path}")
 
-        # 🧩 Stable Headless Options for Render / Heroku / Docker
         chrome_opts = Options()
         chrome_opts.binary_location = str(relocated_path)
+        # Headless-safe flags
         chrome_opts.add_argument("--headless=new")
         chrome_opts.add_argument("--no-sandbox")
         chrome_opts.add_argument("--disable-dev-shm-usage")
         chrome_opts.add_argument("--disable-gpu")
         chrome_opts.add_argument("--disable-software-rasterizer")
-        chrome_opts.add_argument("--disable-features=VizDisplayCompositor")
-        chrome_opts.add_argument("--remote-debugging-port=9222")
-        chrome_opts.add_argument("--window-size=1280,720")
         chrome_opts.add_argument("--disable-extensions")
-        chrome_opts.add_argument("--disable-translate")
         chrome_opts.add_argument("--disable-background-networking")
         chrome_opts.add_argument("--disable-sync")
-        chrome_opts.add_argument("--disable-web-security")
         chrome_opts.add_argument("--disable-default-apps")
         chrome_opts.add_argument("--mute-audio")
-        chrome_opts.add_argument("--user-data-dir=/tmp/chrome-user-data")  # ✅ Critical
+        chrome_opts.add_argument("--remote-debugging-port=9222")
+        chrome_opts.add_argument("--window-size=1280,720")
+        chrome_opts.add_argument("--user-data-dir=/tmp/chrome-user-data")
 
-        driver = webdriver.Chrome(options=chrome_opts)
+        service = Service(executable_path=shutil.which("chromedriver"))
+        driver = webdriver.Chrome(service=service, options=chrome_opts)
         return driver
 
     except Exception as e:
