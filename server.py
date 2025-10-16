@@ -11,6 +11,8 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from pydantic import BaseModel
 from datetime import datetime
+from dotenv import load_dotenv
+load_dotenv()
 
 # ----------------------------------------------------------
 # App initialization
