@@ -1,28 +1,31 @@
 #!/usr/bin/env bash
-# ==========================================================
-# install_system_chrome.sh — Install Google Chrome & ChromeDriver
-# ==========================================================
-
+# ======================================================
+# install_system_chrome.sh — Render-safe Chrome installer
+# ======================================================
 set -e
 
-echo "[INFO] Installing Google Chrome and ChromeDriver..."
+echo "[INFO] Installing Chromium (user-space)..."
 
-# Prepare APT environment
-apt-get update -y || echo "[WARN] apt-get update failed (Render sandbox may be readonly)"
-apt-get install -y wget gnupg unzip curl || true
+# Create working directory
+mkdir -p /opt/render/project/src/.local/chrome
+cd /opt/render/project/src/.local/chrome
 
-# Add Google Chrome’s official key and repo
-if [ ! -f /etc/apt/sources.list.d/google-chrome.list ]; then
-  wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-linux-keyring.gpg
-  echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
-    > /etc/apt/sources.list.d/google-chrome.list
+# Download precompiled Chromium for Linux
+CHROME_URL="https://storage.googleapis.com/chromium-browser-snapshots/Linux_x64/1213125/chrome-linux.zip"
+wget -q $CHROME_URL -O chrome-linux.zip
+
+# Extract to user-space
+unzip -q chrome-linux.zip
+rm chrome-linux.zip
+
+# Verify binary
+if [ -f "chrome-linux/chrome" ]; then
+  echo "[INFO] Chromium installed at $(pwd)/chrome-linux/chrome"
+else
+  echo "[ERROR] Chromium binary missing!"
+  exit 1
 fi
 
-# Install Chrome Stable and matching driver
-apt-get update -y
-apt-get install -y google-chrome-stable chromium-driver
-
-echo "[INFO] Chrome version:"
-google-chrome --version || echo "[WARN] Chrome not found after install."
-echo "[INFO] ChromeDriver version:"
-chromedriver --version || echo "[WARN] ChromeDriver not found after install."
+# Export environment variable for runtime
+echo "export CHROME_BINARY=/opt/render/project/src/.local/chrome/chrome-linux/chrome" >> ~/.bashrc
+echo "[INFO] CHROME_BINARY set for runtime."
