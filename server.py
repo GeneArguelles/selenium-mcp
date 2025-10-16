@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # ============================================================
-# server.py — Render-safe Selenium MCP Server
+# server.py — Render-safe Selenium MCP Server (Auto Chrome Detect)
 # ============================================================
 
+import os
 import time
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -11,14 +12,32 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-# ============================================================
-# FastAPI app initialization
-# ============================================================
-
 app = FastAPI(title="Selenium MCP Server")
-
 start_time = time.time()
 last_invocation = "No tool executed yet."
+
+
+# ============================================================
+# Detect Chrome binary dynamically
+# ============================================================
+
+def find_chrome_binary():
+    possible_paths = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/opt/google/chrome/google-chrome",
+        "/app/.apt/usr/bin/google-chrome",
+        "/app/.apt/usr/bin/chromium-browser",
+        "/usr/local/bin/chromium",
+        "/usr/local/bin/google-chrome",
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"[INFO] Found Chrome binary at: {path}")
+            return path
+    print("[WARN] No Chrome binary found in standard paths.")
+    return None
 
 
 # ============================================================
@@ -27,11 +46,17 @@ last_invocation = "No tool executed yet."
 
 def init_chrome_driver():
     """
-    Initialize headless Chrome in a Render-safe environment.
-    Uses WebDriverManager to ensure a matching ChromeDriver.
+    Initialize headless Chrome safely on Render.
+    Automatically finds Chrome binary and matching driver.
     """
     chrome_opts = Options()
-    chrome_opts.binary_location = "/usr/bin/google-chrome"
+    chrome_path = find_chrome_binary()
+
+    if chrome_path:
+        chrome_opts.binary_location = chrome_path
+    else:
+        raise RuntimeError("500: No Chrome binary found in environment.")
+
     chrome_opts.add_argument("--headless=new")
     chrome_opts.add_argument("--no-sandbox")
     chrome_opts.add_argument("--disable-dev-shm-usage")
@@ -141,6 +166,6 @@ async def mcp_status():
 
 if __name__ == "__main__":
     import uvicorn
-
     print("[INFO] Launching MCP Server...")
     uvicorn.run(app, host="0.0.0.0", port=10000)
+
