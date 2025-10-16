@@ -1,61 +1,53 @@
 #!/usr/bin/env bash
 # ======================================================
-# install_system_chrome.sh — Render-safe Chromium installer
+# install_system_chrome.sh — Render-safe Playwright Chromium installer
 # ------------------------------------------------------
-# Installs a working headless Chromium binary into user-space
-# (no apt-get, no root permissions)
+# Uses Microsoft Playwright's CDN (fast, stable) instead of Google snapshots
 # ======================================================
 
 set -e
 set -o pipefail
 
-echo "[INFO] Installing Chromium (user-space)..."
+echo "[INFO] Installing Playwright Chromium (user-space)..."
 
 CHROME_DIR="/opt/render/project/src/.local/chrome"
-CHROME_ZIP="$CHROME_DIR/chrome-linux.zip"
 CHROME_BIN="$CHROME_DIR/chrome-linux/chrome"
-CHROME_MIRROR="https://commondatastorage.googleapis.com/chromium-browser-snapshots/Linux_x64/1213125/chrome-linux.zip"
+PLAYWRIGHT_VERSION="1.47.2"
 
 mkdir -p "$CHROME_DIR"
 cd "$CHROME_DIR"
 
 # ------------------------------------------------------
-# Step 1: Download Chromium archive
+# Step 1: Download Playwright’s Chromium bundle
 # ------------------------------------------------------
+PLAYWRIGHT_ZIP_URL="https://playwright.azureedge.net/builds/chromium/1090/chromium-linux.zip"
+PLAYWRIGHT_ZIP="$CHROME_DIR/chromium-linux.zip"
+
 if [ -f "$CHROME_BIN" ]; then
   echo "[INFO] ✅ Existing Chromium binary found at $CHROME_BIN"
 else
-  echo "[INFO] Downloading Chromium from mirror..."
-  curl -L -f -o "$CHROME_ZIP" "$CHROME_MIRROR" --progress-bar || {
-    echo "[ERROR] ❌ Failed to download Chromium binary."
+  echo "[INFO] Downloading Chromium build from Playwright CDN..."
+  curl -L -f -o "$PLAYWRIGHT_ZIP" "$PLAYWRIGHT_ZIP_URL" --progress-bar || {
+    echo "[ERROR] ❌ Failed to download Playwright Chromium bundle."
     exit 1
   }
-
-  # Verify ZIP validity
-  if unzip -tq "$CHROME_ZIP" >/dev/null 2>&1; then
-    echo "[INFO] Zip integrity check passed."
-  else
-    echo "[ERROR] ❌ Invalid or partial zip — download corrupted!"
-    rm -f "$CHROME_ZIP"
-    exit 1
-  fi
 
   echo "[INFO] Extracting Chromium..."
-  unzip -q "$CHROME_ZIP" || {
-    echo "[ERROR] ❌ Failed to unzip Chromium archive."
+  unzip -q "$PLAYWRIGHT_ZIP" -d "$CHROME_DIR" || {
+    echo "[ERROR] ❌ Failed to unzip Playwright Chromium archive."
     exit 1
   }
-  rm -f "$CHROME_ZIP"
+  rm -f "$PLAYWRIGHT_ZIP"
 fi
 
 # ------------------------------------------------------
-# Step 2: Verify binary
+# Step 2: Verify binary presence
 # ------------------------------------------------------
 if [ -x "$CHROME_BIN" ]; then
-  echo "[INFO] ✅ Chromium installed successfully at $CHROME_BIN"
-  "$CHROME_BIN" --version || echo "[WARN] Chrome version check failed (but binary exists)."
+  echo "[INFO] ✅ Chromium (Playwright) installed successfully at $CHROME_BIN"
+  "$CHROME_BIN" --version || echo "[WARN] Chrome version check failed (non-fatal)."
 else
-  echo "[ERROR] ❌ Chromium binary missing or not executable!"
+  echo "[ERROR] ❌ Chromium binary not found after extraction!"
   exit 1
 fi
 
