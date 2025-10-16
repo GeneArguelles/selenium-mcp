@@ -1,28 +1,20 @@
 #!/usr/bin/env bash
 # ==========================================================
-# start.sh — Render-safe startup for Playwright MCP Server
+# start.sh — Runtime start script for Selenium MCP
 # ==========================================================
 
-set -e
-echo "[INFO] Starting Playwright MCP startup sequence..."
+echo "[INFO] Starting Selenium MCP startup sequence..."
 
-# ----------------------------------------------------------
-# 1️⃣ Ensure Playwright Chromium is available
-# ----------------------------------------------------------
-echo "[INFO] Installing Playwright Chromium (if not cached)..."
-python -m playwright install chromium --with-deps || true
+# 1️⃣ Install Chrome/ChromeDriver at runtime
+bash install_chrome_runtime.sh
 
-# ----------------------------------------------------------
-# 2️⃣ Print environment summary
-# ----------------------------------------------------------
+# 2️⃣ Print environment info
 echo "[INFO] Environment Summary:"
 echo "  🧩 Python: $(python3 --version)"
 echo "  🧩 Node: $(node --version 2>/dev/null || echo 'none')"
 echo "  🧩 Current Working Directory: $(pwd)"
 echo "  🧩 PATH: $PATH"
 
-# ----------------------------------------------------------
-# 3️⃣ Start FastAPI Server
-# ----------------------------------------------------------
-echo "[INFO] Launching FastAPI (Uvicorn) server..."
-exec uvicorn server:app --host 0.0.0.0 --port $PORT
+# 3️⃣ Launch FastAPI via uvicorn
+echo "[INFO] Launching MCP Server..."
+exec uvicorn server:app --host 0.0.0.0 --port ${PORT:-10000}
