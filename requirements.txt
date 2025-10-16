@@ -5,3 +5,4 @@ selenium>=4.22
 webdriver-manager>=4.0
 pyppeteer>=2.0.0
 chromedriver-binary-auto==0.3.1
+playwright>=1.46.0
