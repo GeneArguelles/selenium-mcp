@@ -81,24 +81,27 @@ def get_schema():
         "type": "mcp_server",
         "server_info": {
             "name": "Selenium",
-            "description": "MCP server providing headless browser automation via Selenium.",
+            "description": "Headless browser automation server using Selenium.",
             "version": "1.0.0"
         },
         "tools": [
             {
                 "name": "selenium_open_page",
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
-                "parameters": {
+                "input_schema": {
                     "type": "object",
                     "properties": {
-                        "url": {"type": "string"}
+                        "url": {
+                            "type": "string",
+                            "description": "The URL to open in the browser."
+                        }
                     },
                     "required": ["url"]
                 }
             }
         ]
     }
-    print("[INFO] Served strict /mcp/schema for Agent Builder")
+    print("[INFO] Served strict /mcp/schema (Agent Builder tool-contract compliant)")
     return JSONResponse(content=schema)
 
 
