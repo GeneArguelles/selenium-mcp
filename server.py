@@ -88,26 +88,28 @@ async def mcp_schema():
             "description": MCP_DESCRIPTION,
             "version": MCP_VERSION,
             "runtime": platform.python_version(),
-            "capabilities": {
-                "invocation": True,
-                "streaming": False,
-                "multi_tool": False
-            },
         },
-        "tools": [
-            {
-                "name": "selenium_open_page",
-                "description": "Open a URL in a headless Chrome browser and return the page title.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
-                },
-            }
-        ],
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False,
+            "tools": [
+                {
+                    "name": "selenium_open_page",
+                    "description": "Open a URL in a headless Chrome browser and return the page title.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {"type": "string"}
+                        },
+                        "required": ["url"],
+                    },
+                }
+            ],
+        },
     }
 
-    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (FINAL MCP spec-compliant)")
+    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (OpenAI Agent Builder nested capabilities spec)")
     return JSONResponse(content=schema)
 
 
