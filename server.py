@@ -9,6 +9,7 @@ Selenium browser automation to OpenAI Agent Builder or local tools.
 import os
 import time
 import platform
+import subprocess
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from selenium import webdriver
@@ -27,16 +28,14 @@ MCP_DESCRIPTION = os.getenv(
     "MCP_DESCRIPTION", "MCP server providing headless browser automation via Selenium."
 )
 MCP_VERSION = os.getenv("MCP_VERSION", "1.0.0")
-CHROME_PATH = os.getenv("CHROME_PATH", "/usr/bin/google-chrome")
+CHROME_PATH = os.getenv("CHROME_PATH", "/opt/render/project/src/.local/chrome/chrome-linux/chrome")
 PORT = int(os.getenv("PORT", "10000"))
 
 # ==========================================================
 # 2️⃣ Initialize FastAPI app
 # ==========================================================
 app = FastAPI(title=MCP_NAME)
-
 startup_time = time.time()
-
 
 # ==========================================================
 # 3️⃣ Root endpoint for Render health checks
@@ -54,14 +53,12 @@ async def root():
     )
     return PlainTextResponse(msg)
 
-
 # ==========================================================
 # 4️⃣ MCP Ping endpoint
 # ==========================================================
 @app.get("/mcp/ping")
 async def mcp_ping():
     return {"status": "ok"}
-
 
 # ==========================================================
 # 5️⃣ MCP Status endpoint
@@ -76,7 +73,6 @@ async def mcp_status():
         "chrome_path": CHROME_PATH,
         "python_runtime": platform.python_version(),
     }
-
 
 # ==========================================================
 # 6️⃣ MCP Schema endpoint (dynamic)
@@ -104,10 +100,8 @@ async def mcp_schema():
             }
         ],
     }
-
     print(f"[INFO] Served /mcp/schema for {MCP_NAME} (runtime={platform.python_version()})")
     return JSONResponse(content=schema)
-
 
 # ==========================================================
 # 7️⃣ MCP Invoke endpoint — executes Selenium tool
@@ -137,8 +131,39 @@ async def mcp_invoke(request: Request):
     chrome_options.binary_location = CHROME_PATH
 
     try:
-        # Auto-install the matching ChromeDriver
-        driver_path = ChromeDriverManager().install()
+        # ==============================================================
+        # 🔍 Detect Chrome version dynamically (robust multi-path lookup)
+        # ==============================================================
+        chrome_candidates = [
+            CHROME_PATH,
+            "/opt/render/project/src/.local/chrome/chrome-linux/chrome",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+        ]
+
+        chrome_major_version = None
+        for candidate in chrome_candidates:
+            try:
+                if os.path.exists(candidate):
+                    version_str = subprocess.check_output(
+                        [candidate, "--version"], stderr=subprocess.STDOUT
+                    ).decode("utf-8").strip()
+                    # Example output: "Chromium 120.0.6099.18"
+                    chrome_major_version = version_str.split()[1].split(".")[0]
+                    print(f"[INFO] Using Chrome binary {candidate} ({version_str})")
+                    break
+            except Exception as e:
+                print(f"[WARN] Failed version check for {candidate}: {e}")
+                continue
+
+        if not chrome_major_version:
+            print("[WARN] Could not determine Chrome version — falling back to default driver.")
+            driver_path = ChromeDriverManager().install()
+        else:
+            driver_path = ChromeDriverManager(version=f"{chrome_major_version}.0.0").install()
+            print(f"[INFO] Installed ChromeDriver for version {chrome_major_version}")
+
+        # Launch browser
         service = Service(driver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
@@ -154,7 +179,6 @@ async def mcp_invoke(request: Request):
         print(f"[ERROR] {error_msg}")
         return JSONResponse({"detail": error_msg}, status_code=500)
 
-
 # ==========================================================
 # 8️⃣ Startup logs for Render
 # ==========================================================
@@ -167,7 +191,6 @@ async def startup_event():
     print(f"[INFO] Python Runtime: {platform.python_version()}")
     print(f"[INFO] Chrome Binary: {CHROME_PATH}")
     print("==========================================================")
-
 
 # ==========================================================
 # 9️⃣ Run the server (for local debugging)
