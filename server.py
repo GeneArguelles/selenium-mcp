@@ -166,3 +166,19 @@ def on_startup():
     print(f"[INFO] ChromeDriver Path: {CHROMEDRIVER_PATH}")
     print("==========================================================")
     print("[INFO] Selenium MCP startup complete.")
+
+
+# ==========================================================
+# Entry Point for Render Deployment
+# ==========================================================
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", "10000"))
+    print(f"[BOOT] Launching Uvicorn on 0.0.0.0:{port}")
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False,
+        log_level="info",
+    )
