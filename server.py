@@ -1,24 +1,8 @@
 #!/usr/bin/env python3
 # ==========================================================
-# Selenium MCP Server (Render-Safe Version)
+# server.py — Selenium MCP Server (Render-Ready)
 # ==========================================================
-
-import os, time
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from pydantic import BaseModel
-from datetime import datetime
-from dotenv import load_dotenv
-load_dotenv()
-
-# ----------------------------------------------------------
-# App initialization
-#!/usr/bin/env python3
-# ==========================================================
-# server.py — Render-safe Selenium MCP Server
+# ✅ Supports OpenAI Agent Builder (MCP Schema v2025-10-01)
 # ==========================================================
 
 import os
@@ -35,9 +19,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 # 1️⃣ FastAPI App Setup
 # ==========================================================
 app = FastAPI(title="Selenium MCP Server", version="1.0.0")
-
 START_TIME = time.time()
-
 
 # ==========================================================
 # 2️⃣ Helper: Create Headless Chrome
@@ -55,7 +37,6 @@ def create_chrome_driver():
     chrome_options.add_argument("--disable-software-rasterizer")
     chrome_options.add_argument("--remote-debugging-port=9222")
 
-    # ✅ Use WebDriverManager to auto-match Chrome version
     driver_path = ChromeDriverManager().install()
     print(f"[INFO] Using ChromeDriver from: {driver_path}")
 
@@ -70,7 +51,7 @@ def create_chrome_driver():
 @app.get("/")
 async def root():
     return {
-        "message": "🧩 Selenium MCP Server is live.",
+        "message": "🧩 Selenium MCP Server is live and ready.",
         "runtime": platform.python_version(),
         "uptime_seconds": round(time.time() - START_TIME, 2),
         "chrome_path": os.environ.get("CHROME_PATH", "/opt/render/project/src/.local/chrome/chrome-linux/chrome")
@@ -103,7 +84,7 @@ async def mcp_schema():
     """
     schema = {
         "version": "2025-10-01",
-        "type": "mcp",  # ✅ REQUIRED FOR OPENAI AGENT BUILDER
+        "type": "mcp_server",  # ✅ FIXED: required exact type for Agent Builder
         "server_info": {
             "name": "selenium_mcp_server",
             "description": "Render-hosted MCP exposing a headless browser automation tool.",
@@ -124,7 +105,7 @@ async def mcp_schema():
             }
         ]
     }
-    print("[INFO] Served /mcp/schema to Agent Builder client.")
+    print("[INFO] Served /mcp/schema to Agent Builder client (type=mcp_server).")
     return JSONResponse(content=schema)
 
 
@@ -157,7 +138,10 @@ async def mcp_invoke(request: Request):
 
     except Exception as e:
         print(f"[ERROR] MCP invoke failed: {e}")
-        return JSONResponse(status_code=500, content={"detail": f"500: Chrome could not start in current environment: {e}"})
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"500: Chrome could not start in current environment: {e}"}
+        )
 
 
 # ==========================================================
