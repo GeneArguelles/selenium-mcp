@@ -29,14 +29,9 @@ LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 MAX_LOGS=3
 
-if [ -d "$LOG_DIR" ]; then
-  count=$(ls -1 "$LOG_DIR" | wc -l)
-  if [ "$count" -ge "$MAX_LOGS" ]; then
-    to_delete=$(ls -1t "$LOG_DIR" | tail -n +$((MAX_LOGS + 1)))
-    for old in $to_delete; do
-      rm -rf "$LOG_DIR/$old"
-    done
-  fi
+count=$(ls -1 "$LOG_DIR" | wc -l 2>/dev/null || echo 0)
+if [ "$count" -ge "$MAX_LOGS" ]; then
+  ls -1t "$LOG_DIR" | tail -n +$((MAX_LOGS + 1)) | xargs -r -I {} rm -rf "$LOG_DIR/{}"
 fi
 
 DEPLOY_DIR="$LOG_DIR/deploy_$(date +%Y%m%d_%H%M%S)"
@@ -53,7 +48,7 @@ else
 fi
 
 # ----------------------------------------------------------
-# 4️⃣ ChromeDriver Installation / Auto-Heal
+# 4️⃣ ChromeDriver Installation
 # ----------------------------------------------------------
 install_chromedriver() {
   echo "[INFO] Starting ChromeDriver auto-installer..."
@@ -109,52 +104,48 @@ install_chromedriver
 validate_chrome_binary
 
 # ----------------------------------------------------------
-# 6️⃣ Launch MCP Server
+# 6️⃣ Launch MCP Server (background, non-blocking)
 # ----------------------------------------------------------
 echo "[INFO] Launching MCP Server..."
-python3 server.py &
+python3 server.py >"$DEPLOY_DIR/mcp.log" 2>&1 &
+SERVER_PID=$!
+sleep 8  # warm-up delay
 
 # ----------------------------------------------------------
-# 7️⃣ Health Retry Loop
+# 7️⃣ Health Retry Loop (non-fatal)
 # ----------------------------------------------------------
 HEALTH_URL="http://127.0.0.1:10000/health"
-RETRIES=3
-SLEEP_INTERVAL=3
+RETRIES=5
+SLEEP_INTERVAL=4
 FAIL_COUNT=0
 
-echo "[INFO] Checking MCP health..."
 for i in $(seq 1 $RETRIES); do
   echo "[INFO] Checking MCP health (attempt ${i}/${RETRIES})..."
   if curl -s --max-time 5 "$HEALTH_URL" | grep -q '"status": "healthy"'; then
     echo "[✅ HEALTHY] MCP responded successfully."
     break
   else
-    echo "[WARN] MCP did not respond, retrying..."
+    echo "[WARN] MCP not ready yet, retrying in ${SLEEP_INTERVAL}s..."
     ((FAIL_COUNT++))
     sleep "$SLEEP_INTERVAL"
   fi
 done
 
-if [ "$FAIL_COUNT" -eq "$RETRIES" ]; then
-  echo "[WARN] MCP health check failed — attempting ChromeDriver rebuild..."
-  install_chromedriver
-  echo "[INFO] Relaunching MCP Server..."
-  pkill -f "server.py" || true
-  python3 server.py &
-  sleep 5
-fi
-
 # ----------------------------------------------------------
-# 8️⃣ Health Summary and Logging
+# 8️⃣ Final Health Summary
 # ----------------------------------------------------------
 echo "----------------------------------------------------------"
 if curl -s "$HEALTH_URL" | grep -q '"status": "healthy"'; then
   echo "[✅ HEALTHY] MCP is running (phase: ready, uptime: $(($(date +%s) - START_TIME))s)"
   echo "[CHROME] $CHROME_BINARY"
 else
-  echo "[❌ UNHEALTHY] MCP did not start properly."
-  echo "[CHROME] Path unavailable or invalid."
+  echo "[⚠️ WARN] MCP health check still failing after retries."
+  echo "[CHROME] $CHROME_BINARY"
+  echo "[INFO] Continuing anyway so Render stays alive..."
 fi
 echo "----------------------------------------------------------"
 echo "[INFO] MCP Startup Completed."
 echo "=========================================================="
+
+# keep process running
+wait $SERVER_PID || true
