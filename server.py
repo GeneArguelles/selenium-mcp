@@ -81,7 +81,7 @@ async def mcp_status():
 async def mcp_schema():
     schema = {
         "version": "2025-10-01",
-        "type": "mcp",  # <-- Critical: must be "mcp", not "mcp_server"
+        "type": "mcp",  # required identifier for Agent Builder handshake
         "server_info": {
             "name": MCP_NAME,
             "description": MCP_DESCRIPTION,
@@ -91,24 +91,25 @@ async def mcp_schema():
         "capabilities": {
             "invocation": True,
             "streaming": False,
-            "multi_tool": False,
-            "tools": [
-                {
-                    "name": "selenium_open_page",
-                    "description": "Open a URL in a headless Chrome browser and return the page title.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string"}
-                        },
-                        "required": ["url"],
-                    },
-                }
-            ],
+            "multi_tool": False
         },
+        # tools must be at the root (not nested) in latest spec
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"]
+                }
+            }
+        ]
     }
 
-    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (Agent Builder MCP format OK)")
+    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (Agent Builder root tools layout)")
     return JSONResponse(content=schema)
 
 
