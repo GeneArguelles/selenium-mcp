@@ -46,6 +46,29 @@ def root():
         "chrome_path": CHROME_PATH,
     }
 
+@app.post("/")
+def post_root():
+    """
+    Agent Builder root discovery endpoint.
+    It tells the client where to find schema and invocation routes.
+    """
+    print("[INFO] POST / root discovery requested")
+    return JSONResponse(
+        content={
+            "type": "mcp_server",
+            "version": "2025-10-01",
+            "endpoints": {
+                "schema": "/mcp/schema",
+                "invoke": "/mcp/invoke",
+                "status": "/mcp/status"
+            },
+            "server_info": {
+                "name": "Selenium",
+                "description": "MCP server providing headless browser automation via Selenium.",
+                "version": "1.0.0"
+            }
+        }
+    )
 
 # ==========================================================
 #  MCP SCHEMA (GET + POST)
