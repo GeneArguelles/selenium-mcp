@@ -81,13 +81,18 @@ async def mcp_status():
 async def mcp_schema():
     schema = {
         "version": "2025-10-01",
-        "type": "mcp",
+        "type": "mcp_server",
         "server_info": {
-            "type": "mcp",
+            "type": "mcp_server",
             "name": MCP_NAME,
             "description": MCP_DESCRIPTION,
             "version": MCP_VERSION,
             "runtime": platform.python_version(),
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False
+            },
         },
         "tools": [
             {
@@ -102,8 +107,9 @@ async def mcp_schema():
         ],
     }
 
-    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (Agent Builder spec compliant)")
+    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (FINAL MCP spec-compliant)")
     return JSONResponse(content=schema)
+
 
 # ==========================================================
 # 7️⃣ MCP Invoke endpoint — executes Selenium tool
