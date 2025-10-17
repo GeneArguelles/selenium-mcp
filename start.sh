@@ -81,6 +81,24 @@ if [ "$LOCAL_MODE" = false ]; then
   bash ./install_chromedriver.sh || echo "[WARN] Render ChromeDriver setup failed (may retry later)."
 fi
 
+# ==========================================================
+# Chrome Binary Auto-Installer (Render-safe fallback)
+# ==========================================================
+CHROME_DIR="/opt/render/project/src/.local/chrome/chrome-linux"
+CHROME_BIN="$CHROME_DIR/chrome"
+CHROME_VERSION=${CHROME_VERSION:-"120.0.6099.18"}
+
+if [ ! -f "$CHROME_BIN" ]; then
+  echo "[WARN] Chrome binary not found — installing Chromium for testing..."
+  mkdir -p "$CHROME_DIR"
+  wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux.zip" -O /tmp/chrome-linux.zip
+  unzip -q /tmp/chrome-linux.zip -d /opt/render/project/src/.local/chrome/
+  chmod +x "$CHROME_BIN"
+  echo "[INFO] ✅ Chromium installed at $CHROME_BIN"
+else
+  echo "[INFO] 🧩 Chrome binary already present."
+fi
+
 # ----------------------------------------------------------
 # 6️⃣ Launch MCP Server
 # ----------------------------------------------------------
