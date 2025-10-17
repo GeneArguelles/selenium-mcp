@@ -81,9 +81,8 @@ async def mcp_status():
 async def mcp_schema():
     schema = {
         "version": "2025-10-01",
-        "type": "mcp_server",
+        "type": "mcp",  # <-- Critical: must be "mcp", not "mcp_server"
         "server_info": {
-            "type": "mcp_server",
             "name": MCP_NAME,
             "description": MCP_DESCRIPTION,
             "version": MCP_VERSION,
@@ -109,7 +108,7 @@ async def mcp_schema():
         },
     }
 
-    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (OpenAI Agent Builder nested capabilities spec)")
+    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (Agent Builder MCP format OK)")
     return JSONResponse(content=schema)
 
 
