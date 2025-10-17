@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 server.py — Render-safe & Local-ready Selenium MCP Server
----------------------------------------------------------
-Provides a Model Context Protocol (MCP) endpoint that exposes
-Selenium browser automation to OpenAI Agent Builder or local tools.
+=========================================================
+Provides a Model Context Protocol (MCP) endpoint exposing Selenium-based
+browser automation for OpenAI Agent Builder or local integration.
 """
 
 import os
@@ -19,9 +19,9 @@ from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import load_dotenv
 
 # ==========================================================
-# 1️⃣ Load environment variables
+# 1️⃣ Load environment variables (.env + Render ENV)
 # ==========================================================
-load_dotenv()  # Enables .env support for local development
+load_dotenv()
 
 MCP_NAME = os.getenv("MCP_NAME", "Selenium")
 MCP_DESCRIPTION = os.getenv(
@@ -38,7 +38,7 @@ app = FastAPI(title=MCP_NAME)
 startup_time = time.time()
 
 # ==========================================================
-# 3️⃣ Root endpoint for Render health checks
+# 3️⃣ Root endpoint — Render health check
 # ==========================================================
 @app.get("/")
 async def root():
@@ -75,14 +75,15 @@ async def mcp_status():
     }
 
 # ==========================================================
-# 6️⃣ MCP Schema endpoint (dynamic)
+# 6️⃣ MCP Schema endpoint (Agent Builder spec compliant)
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST"])
 async def mcp_schema():
     schema = {
         "version": "2025-10-01",
-        "type": "mcp_server",
+        "type": "mcp",
         "server_info": {
+            "type": "mcp",
             "name": MCP_NAME,
             "description": MCP_DESCRIPTION,
             "version": MCP_VERSION,
@@ -100,7 +101,8 @@ async def mcp_schema():
             }
         ],
     }
-    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (runtime={platform.python_version()})")
+
+    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (Agent Builder spec compliant)")
     return JSONResponse(content=schema)
 
 # ==========================================================
@@ -121,7 +123,7 @@ async def mcp_invoke(request: Request):
 
     print(f"[INFO] Invoking selenium_open_page on: {url}")
 
-    # Configure Chrome options for headless execution
+    # Configure Chrome options
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -148,7 +150,7 @@ async def mcp_invoke(request: Request):
                     version_str = subprocess.check_output(
                         [candidate, "--version"], stderr=subprocess.STDOUT
                     ).decode("utf-8").strip()
-                    # Example output: "Chromium 120.0.6099.18"
+                    # Example: "Chromium 120.0.6099.18"
                     chrome_major_version = version_str.split()[1].split(".")[0]
                     print(f"[INFO] Using Chrome binary {candidate} ({version_str})")
                     break
@@ -157,7 +159,7 @@ async def mcp_invoke(request: Request):
                 continue
 
         if not chrome_major_version:
-            print("[WARN] Could not determine Chrome version — falling back to default driver.")
+            print("[WARN] Could not determine Chrome version — using default driver.")
             driver_path = ChromeDriverManager().install()
         else:
             driver_path = ChromeDriverManager(version=f"{chrome_major_version}.0.0").install()
@@ -180,7 +182,7 @@ async def mcp_invoke(request: Request):
         return JSONResponse({"detail": error_msg}, status_code=500)
 
 # ==========================================================
-# 8️⃣ Startup logs for Render
+# 8️⃣ Startup logs for Render / local
 # ==========================================================
 @app.on_event("startup")
 async def startup_event():
@@ -193,7 +195,7 @@ async def startup_event():
     print("==========================================================")
 
 # ==========================================================
-# 9️⃣ Run the server (for local debugging)
+# 9️⃣ Local entry point
 # ==========================================================
 if __name__ == "__main__":
     import uvicorn
