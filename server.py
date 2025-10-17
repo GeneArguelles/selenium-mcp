@@ -1,69 +1,110 @@
+# ==========================================================
+# server.py — Selenium MCP Server (Render + Local Ready)
+# ==========================================================
+
 import os
 import platform
 import time
-import json
-import asyncio
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from dotenv import load_dotenv
 
 # ==========================================================
-# Load environment
+# Environment Setup
 # ==========================================================
 load_dotenv()
 
-# Runtime flags
+APP_START_TIME = time.time()
+
+app = FastAPI(title="Selenium MCP Server")
+
+SERVER_NAME = os.getenv("SERVER_NAME", "Selenium")
+SERVER_DESC = os.getenv(
+    "SERVER_DESC", "MCP server providing headless browser automation via Selenium."
+)
 LOCAL_MODE = os.getenv("LOCAL_MODE", "false").lower() == "true"
-CHROME_VERSION = os.getenv("CHROME_VERSION", "120.0.6099.18")
 
-# Paths
+# ==========================================================
+# Chrome Binary Validation (Render + Local fallback)
+# ==========================================================
 if LOCAL_MODE:
-    CHROME_PATH = os.getenv(
-        "LOCAL_CHROME_PATH",
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    CHROME_BINARY = os.getenv(
+        "LOCAL_CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     )
-    CHROMEDRIVER_PATH = os.getenv(
-        "LOCAL_CHROMEDRIVER_PATH",
-        "/usr/local/bin/chromedriver"
-    )
+    CHROMEDRIVER_PATH = os.getenv("LOCAL_CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
 else:
-    CHROME_PATH = os.getenv(
-        "CHROME_PATH",
-        "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
+    CHROME_BINARY = os.getenv(
+        "CHROME_BINARY", "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
     )
-    CHROMEDRIVER_PATH = os.getenv(
-        "CHROMEDRIVER_PATH",
-        "/opt/render/project/src/chromedriver/chromedriver"
-    )
+    CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "./chromedriver/chromedriver")
+
+# Validate Chrome binary presence
+if not os.path.exists(CHROME_BINARY):
+    print(f"[WARN] Chrome binary not found at {CHROME_BINARY}. Attempting fallback...")
+    fallback_path = "/usr/bin/google-chrome"
+    if os.path.exists(fallback_path):
+        CHROME_BINARY = fallback_path
+        print(f"[INFO] ✅ Using fallback Chrome binary: {CHROME_BINARY}")
+    else:
+        print(f"[ERROR] ❌ No valid Chrome binary found.")
+else:
+    print(f"[INFO] ✅ Chrome binary confirmed: {CHROME_BINARY}")
 
 # ==========================================================
-# FastAPI initialization
+# Health and Diagnostics
 # ==========================================================
-app = FastAPI(title="Selenium MCP Server", version="1.0.0")
-start_time = time.time()
+
+@app.get("/health")
+def health_check():
+    uptime = round(time.time() - APP_START_TIME, 2)
+    phase = "ready"
+    chrome_ok = os.path.exists(CHROME_BINARY)
+    return {
+        "status": "healthy" if chrome_ok else "unhealthy",
+        "phase": phase,
+        "uptime_seconds": uptime,
+        "chrome_path": CHROME_BINARY,
+    }
 
 # ==========================================================
-# MCP Schema Endpoint (STRICT COMPLIANCE)
+# MCP Schema + Invocation Models
 # ==========================================================
+
+class SchemaResponse(BaseModel):
+    version: str
+    type: str
+    server_info: dict
+    tools: list
+
+
+class InvokeRequest(BaseModel):
+    tool: str
+    arguments: dict
+
+
 @app.post("/mcp/schema")
-@app.get("/mcp/schema")
-async def mcp_schema():
-    """Serve the MCP schema (GET/POST) per Agent Builder spec"""
-    schema = {
+def get_schema():
+    """
+    Return the MCP tool schema for this Selenium service.
+    """
+    print("[INFO] Served /mcp/schema for Selenium (Agent Builder spec compliant)")
+    return {
         "version": "2025-10-01",
-        "type": "mcp",
+        "type": "mcp_server",
         "server_info": {
-            "name": "Selenium",
-            "description": "MCP server providing headless browser automation via Selenium.",
+            "type": "mcp_server",
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
             "version": "1.0.0",
             "runtime": platform.python_version(),
-        },
-        "capabilities": {
-            "invocation": True,
-            "streaming": False,
-            "multi_tool": False
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False,
+            },
         },
         "tools": [
             {
@@ -71,101 +112,57 @@ async def mcp_schema():
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "url": {"type": "string"}
-                    },
-                    "required": ["url"]
-                }
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
+                },
             }
-        ]
+        ],
     }
-    print("[INFO] Served /mcp/schema for Selenium (Agent Builder compliant)")
-    return JSONResponse(schema)
 
 # ==========================================================
-# MCP Invoke Endpoint
+# Selenium Tool Implementation
 # ==========================================================
+
 @app.post("/mcp/invoke")
-async def mcp_invoke(request: Request):
-    try:
-        payload = await request.json()
-        tool = payload.get("tool")
-        args = payload.get("arguments", {})
+def invoke_tool(request: InvokeRequest):
+    """
+    Execute a tool (e.g., selenium_open_page) via Selenium.
+    """
+    if request.tool == "selenium_open_page":
+        url = request.arguments.get("url")
+        if not url:
+            raise HTTPException(status_code=400, detail="Missing URL argument.")
 
-        if tool == "selenium_open_page":
-            url = args.get("url")
-            if not url:
-                return JSONResponse({"detail": "Missing URL parameter"}, status_code=400)
-            title = await open_page_and_get_title(url)
-            return JSONResponse({"result": {"url": url, "title": title}})
+        chrome_options = Options()
+        chrome_options.binary_location = CHROME_BINARY
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
 
-        return JSONResponse({"detail": f"Unknown tool: {tool}"}, status_code=400)
+        try:
+            service = Service(CHROMEDRIVER_PATH)
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.get(url)
+            title = driver.title
+            driver.quit()
+            return {"result": f"Opened {url}", "title": title}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Chrome could not start: {e}")
 
-    except Exception as e:
-        return JSONResponse({"detail": f"500: Chrome could not start: {e}"}, status_code=500)
-
-# ==========================================================
-# Helper Function: Launch Headless Chrome and Retrieve Title
-# ==========================================================
-async def open_page_and_get_title(url: str):
-    try:
-        options = Options()
-        options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-
-        options.binary_location = CHROME_PATH
-
-        driver = webdriver.Chrome(executable_path=CHROMEDRIVER_PATH, options=options)
-        driver.get(url)
-        title = driver.title
-        driver.quit()
-        return title
-
-    except Exception as e:
-        raise Exception(str(e))
+    raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
 
 # ==========================================================
-# Health Endpoint (Render heartbeat)
+# Startup Info
 # ==========================================================
-@app.get("/health")
-async def health():
-    uptime = round(time.time() - start_time, 2)
-    phase = "ready"
-    return {
-        "status": "healthy",
-        "phase": phase,
-        "uptime_seconds": uptime,
-        "chrome_path": CHROME_PATH,
-    }
 
-# ==========================================================
-# Root Endpoint (for Render root discovery)
-# ==========================================================
-@app.get("/")
-@app.post("/")
-async def root():
-    print("[INFO] POST / root discovery requested")
-    return {
-        "status": "running",
-        "message": "Selenium MCP Server is live.",
-        "runtime": platform.python_version(),
-        "chrome_path": CHROME_PATH,
-    }
-
-# ==========================================================
-# Startup Logging
-# ==========================================================
 @app.on_event("startup")
-async def startup_event():
+def on_startup():
     print("==========================================================")
     print("[INFO] Starting Selenium MCP Server...")
-    print("[INFO] Description: MCP server providing headless browser automation via Selenium.")
-    print("[INFO] Version: 1.0.0")
+    print(f"[INFO] Description: {SERVER_DESC}")
+    print(f"[INFO] Version: 1.0.0")
     print(f"[INFO] Python Runtime: {platform.python_version()}")
-    print(f"[INFO] Chrome Binary: {CHROME_PATH}")
-    print(f"[INFO] Chrome Version (env): {CHROME_VERSION}")
+    print(f"[INFO] Chrome Binary: {CHROME_BINARY}")
+    print(f"[INFO] ChromeDriver Path: {CHROMEDRIVER_PATH}")
     print("==========================================================")
-    await asyncio.sleep(1)
     print("[INFO] Selenium MCP startup complete.")
