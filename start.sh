@@ -1,103 +1,112 @@
 #!/usr/bin/env bash
 # ==========================================================
-# start.sh — Unified startup script for Selenium MCP
-# Local + Render compatible (self-healing)
+# start.sh — Unified startup manager for Selenium MCP Server
 # ==========================================================
 
 set -e
-
-# ANSI colors
-GREEN="\033[1;32m"
-YELLOW="\033[1;33m"
-RED="\033[1;31m"
-NC="\033[0m" # No color
+START_TIME=$(date +%s)
 
 echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
 
 # ----------------------------------------------------------
-# 1️⃣ Load .env (if exists)
+# 1️⃣ Load Environment
 # ----------------------------------------------------------
-if [ -f .env ]; then
+if [ -f ".env" ]; then
   echo "[INFO] Loading .env environment variables..."
   set -a
-  source .env || true
+  source .env
   set +a
 else
-  echo "[WARN] .env file not found — using defaults."
+  echo "[WARN] .env file not found, using defaults."
 fi
 
 # ----------------------------------------------------------
-# 2️⃣ Log rotation (Render-safe)
+# 2️⃣ Rotate Logs
 # ----------------------------------------------------------
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
-ts=$(date +"%Y%m%d_%H%M%S")
-DEPLOY_DIR="${LOG_DIR}/deploy_${ts}"
-mkdir -p "${DEPLOY_DIR}"
-echo "[INFO] Rotating logs (keeping last 3)..."
-find "$LOG_DIR" -mindepth 1 -maxdepth 1 -type d -name "deploy_*" | sort | head -n -3 | xargs -I {} rm -rf "{}"
-echo "[INFO] Logs rotated. Active folder: ${DEPLOY_DIR}"
+MAX_LOGS=3
+
+if [ -d "$LOG_DIR" ]; then
+  count=$(ls -1 "$LOG_DIR" | wc -l)
+  if [ "$count" -ge "$MAX_LOGS" ]; then
+    to_delete=$(ls -1t "$LOG_DIR" | tail -n +$((MAX_LOGS + 1)))
+    for old in $to_delete; do
+      rm -rf "$LOG_DIR/$old"
+    done
+  fi
+fi
+
+DEPLOY_DIR="$LOG_DIR/deploy_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$DEPLOY_DIR"
+echo "[INFO] Logs rotated. Active folder: $DEPLOY_DIR"
 
 # ----------------------------------------------------------
-# 3️⃣ Determine runtime mode
+# 3️⃣ Mode Detection
 # ----------------------------------------------------------
-LOCAL_MODE="${LOCAL_MODE:-false}"
-
-if [ "$LOCAL_MODE" = true ]; then
-  echo "[INFO] 🧩 LOCAL_MODE enabled — using macOS Chrome paths"
+if [ "${LOCAL_MODE,,}" = "true" ]; then
+  echo "[💻] Running in LOCAL_MODE (macOS) ..."
 else
-  echo "[INFO] ☁️ Running in Render (server) mode"
+  echo "[☁️] Running in Render (server) mode ..."
 fi
 
 # ----------------------------------------------------------
-# 4️⃣ Local Mode — Self-healing Chrome setup
+# 4️⃣ ChromeDriver Installation / Auto-Heal
 # ----------------------------------------------------------
-if [ "$LOCAL_MODE" = true ]; then
-  INSTALLER="./mac_install_chromefortesting.sh"
+install_chromedriver() {
+  echo "[INFO] Starting ChromeDriver auto-installer..."
+  mkdir -p chromedriver
+  ARCH=$(uname -m)
+  OS_TYPE=$(uname)
+  echo "[INFO] Detected ${OS_TYPE} ${ARCH}"
 
-  if [ ! -x "$INSTALLER" ]; then
-    echo "[WARN] mac_install_chromefortesting.sh not found — creating stub..."
-    echo "#!/bin/bash" > "$INSTALLER"
-    echo "echo '[WARN] Installer script missing — please restore mac_install_chromefortesting.sh'" >> "$INSTALLER"
-    chmod +x "$INSTALLER"
+  if [ "${LOCAL_MODE,,}" = "true" ]; then
+    echo "[INFO] Skipping ChromeDriver install (LOCAL_MODE)"
+    return
   fi
 
-  # Check if Chrome + ChromeDriver exist
-  if [ ! -f "${LOCAL_CHROME_PATH}" ] || [ ! -f "${LOCAL_CHROMEDRIVER_PATH}" ]; then
-    echo "[WARN] Chrome or ChromeDriver not found — running installer..."
-    bash "$INSTALLER"
+  DRIVER_VERSION="${CHROME_VERSION:-120.0.6099.18}"
+  ZIP_URL="https://storage.googleapis.com/chrome-for-testing-public/${DRIVER_VERSION}/linux64/chromedriver-linux64.zip"
+
+  echo "[INFO] Download URL: ${ZIP_URL}"
+  wget -q "$ZIP_URL" -O /tmp/chromedriver.zip
+  unzip -q -o /tmp/chromedriver.zip -d chromedriver/
+  chmod +x chromedriver/chromedriver
+
+  echo "[INFO] ✅ ChromeDriver installation complete!"
+  chromedriver/chromedriver --version || echo "[WARN] Unable to run chromedriver binary version check."
+}
+
+# ----------------------------------------------------------
+# 5️⃣ Chrome Binary Validation
+# ----------------------------------------------------------
+validate_chrome_binary() {
+  if [ "${LOCAL_MODE,,}" = "true" ]; then
+    export CHROME_BINARY="${LOCAL_CHROME_BINARY:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
   else
-    echo "[INFO] ✅ Local Chrome + ChromeDriver already installed."
+    export CHROME_BINARY="${CHROME_BINARY:-/opt/render/project/src/.local/chrome/chrome-linux/chrome}"
   fi
-fi
 
-# ----------------------------------------------------------
-# 5️⃣ Render Mode — Ensure ChromeDriver exists
-# ----------------------------------------------------------
-if [ "$LOCAL_MODE" = false ]; then
-  echo "[INFO] Running ChromeDriver installer (Render environment)..."
-  bash ./install_chromedriver.sh || echo "[WARN] Render ChromeDriver setup failed (may retry later)."
-fi
+  if [ -x "$CHROME_BINARY" ]; then
+    echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
+  else
+    echo "[ERROR] ❌ Chrome binary not found at $CHROME_BINARY"
+    if [ "${LOCAL_MODE,,}" != "true" ]; then
+      echo "[INFO] Attempting Chrome reinstallation..."
+      mkdir -p /opt/render/project/src/.local/chrome
+      wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux.zip" -O /tmp/chrome-linux.zip
+      unzip -q /tmp/chrome-linux.zip -d /opt/render/project/src/.local/chrome/
+      chmod +x /opt/render/project/src/.local/chrome/chrome-linux/chrome
+      export CHROME_BINARY="/opt/render/project/src/.local/chrome/chrome-linux/chrome"
+      echo "[INFO] ✅ Chrome reinstalled and path exported."
+    fi
+  fi
+}
 
-# ==========================================================
-# Chrome Binary Auto-Installer (Render-safe fallback)
-# ==========================================================
-CHROME_DIR="/opt/render/project/src/.local/chrome/chrome-linux"
-CHROME_BIN="$CHROME_DIR/chrome"
-CHROME_VERSION=${CHROME_VERSION:-"120.0.6099.18"}
-
-if [ ! -f "$CHROME_BIN" ]; then
-  echo "[WARN] Chrome binary not found — installing Chromium for testing..."
-  mkdir -p "$CHROME_DIR"
-  wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux.zip" -O /tmp/chrome-linux.zip
-  unzip -q /tmp/chrome-linux.zip -d /opt/render/project/src/.local/chrome/
-  chmod +x "$CHROME_BIN"
-  echo "[INFO] ✅ Chromium installed at $CHROME_BIN"
-else
-  echo "[INFO] 🧩 Chrome binary already present."
-fi
+install_chromedriver
+validate_chrome_binary
 
 # ----------------------------------------------------------
 # 6️⃣ Launch MCP Server
@@ -105,66 +114,47 @@ fi
 echo "[INFO] Launching MCP Server..."
 python3 server.py &
 
-PID=$!
-sleep 2
-
 # ----------------------------------------------------------
-# 7️⃣ Health Check Loop
+# 7️⃣ Health Retry Loop
 # ----------------------------------------------------------
-RETRY_COUNT=0
-MAX_RETRIES=3
-PORT="${PORT:-10000}"
-HEALTH_URL="http://127.0.0.1:${PORT}/health"
+HEALTH_URL="http://127.0.0.1:10000/health"
+RETRIES=3
+SLEEP_INTERVAL=3
+FAIL_COUNT=0
 
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  sleep 2
-  echo "[INFO] Checking MCP health (attempt $((RETRY_COUNT+1))/$MAX_RETRIES)..."
-  if curl -fs "$HEALTH_URL" >/dev/null; then
-    echo "[INFO] ✅ MCP Server is healthy."
+echo "[INFO] Checking MCP health..."
+for i in $(seq 1 $RETRIES); do
+  echo "[INFO] Checking MCP health (attempt ${i}/${RETRIES})..."
+  if curl -s --max-time 5 "$HEALTH_URL" | grep -q '"status": "healthy"'; then
+    echo "[✅ HEALTHY] MCP responded successfully."
     break
+  else
+    echo "[WARN] MCP did not respond, retrying..."
+    ((FAIL_COUNT++))
+    sleep "$SLEEP_INTERVAL"
   fi
-  RETRY_COUNT=$((RETRY_COUNT+1))
 done
 
-# ----------------------------------------------------------
-# 8️⃣ Auto-recover if MCP is unresponsive
-# ----------------------------------------------------------
-if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+if [ "$FAIL_COUNT" -eq "$RETRIES" ]; then
   echo "[WARN] MCP health check failed — attempting ChromeDriver rebuild..."
-  bash ./install_chromedriver.sh || true
-  sleep 3
+  install_chromedriver
   echo "[INFO] Relaunching MCP Server..."
+  pkill -f "server.py" || true
   python3 server.py &
-  PID=$!
+  sleep 5
 fi
 
 # ----------------------------------------------------------
-# 9️⃣ Final Health Summary (color-coded)
+# 8️⃣ Health Summary and Logging
 # ----------------------------------------------------------
 echo "----------------------------------------------------------"
-echo "[INFO] Performing final health summary check..."
-HEALTH_JSON=$(curl -s "$HEALTH_URL" || echo "{}")
-STATUS=$(echo "$HEALTH_JSON" | jq -r '.status // empty')
-PHASE=$(echo "$HEALTH_JSON" | jq -r '.phase // empty')
-CHROME_PATH=$(echo "$HEALTH_JSON" | jq -r '.chrome_path // empty')
-UPTIME=$(echo "$HEALTH_JSON" | jq -r '.uptime_seconds // empty')
-
-if [ "$STATUS" = "healthy" ]; then
-  echo -e "${GREEN}[✅ HEALTHY] MCP is running (phase: $PHASE, uptime: ${UPTIME}s)${NC}"
-  echo -e "${GREEN}[CHROME] $CHROME_PATH${NC}"
-elif [ "$STATUS" = "recovering" ]; then
-  echo -e "${YELLOW}[⚠️ RECOVERING] MCP partially responsive (phase: $PHASE)${NC}"
-  echo -e "${YELLOW}[CHROME] $CHROME_PATH${NC}"
+if curl -s "$HEALTH_URL" | grep -q '"status": "healthy"'; then
+  echo "[✅ HEALTHY] MCP is running (phase: ready, uptime: $(($(date +%s) - START_TIME))s)"
+  echo "[CHROME] $CHROME_BINARY"
 else
-  echo -e "${RED}[❌ UNHEALTHY] MCP did not start properly.${NC}"
-  echo -e "${RED}[CHROME] Path unavailable or invalid.${NC}"
+  echo "[❌ UNHEALTHY] MCP did not start properly."
+  echo "[CHROME] Path unavailable or invalid."
 fi
-
 echo "----------------------------------------------------------"
 echo "[INFO] MCP Startup Completed."
 echo "=========================================================="
-
-# ----------------------------------------------------------
-# 🔁 Keep container running (Render)
-# ----------------------------------------------------------
-wait $PID || true
