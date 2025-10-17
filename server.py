@@ -55,18 +55,11 @@ def root():
 def get_schema():
     schema = {
         "version": "2025-10-01",
-        "type": "mcp",
+        "type": "mcp_server",
         "server_info": {
-            "type": "mcp_server",
             "name": "Selenium",
             "description": "MCP server providing headless browser automation via Selenium.",
-            "version": "1.0.0",
-            "runtime": os.getenv("PYTHON_VERSION", "unknown"),
-            "capabilities": {
-                "invocation": True,
-                "streaming": False,
-                "multi_tool": False,
-            },
+            "version": "1.0.0"
         },
         "tools": [
             {
@@ -74,19 +67,18 @@ def get_schema():
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
-                },
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"]
+                }
             }
-        ],
+        ]
     }
-    print("[INFO] Served /mcp/schema for Selenium (Agent Builder spec compliant)")
+    print("[INFO] Served strict /mcp/schema for Agent Builder")
     return JSONResponse(content=schema)
 
 
-# ==========================================================
-#  MCP INVOKE (main handler)
-# ==========================================================
 # ==========================================================
 #  MCP INVOKE (main handler)
 # ==========================================================
