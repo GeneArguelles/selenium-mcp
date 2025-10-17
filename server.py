@@ -1,10 +1,6 @@
-#!/usr/bin/env python3
-# ==========================================================
-# Selenium MCP Server — Dual-use (Render + Local)
-# ==========================================================
 import os
 import time
-import platform
+import json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from selenium import webdriver
@@ -13,65 +9,64 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import load_dotenv
 
-# ----------------------------------------------------------
-# 1️⃣ Environment Setup
-# ----------------------------------------------------------
-load_dotenv()  # Load from .env if present
+# ==========================================================
+#  ENVIRONMENT INITIALIZATION
+# ==========================================================
+load_dotenv()
+app = FastAPI(title="Selenium MCP Server")
 
-PORT = int(os.getenv("PORT", 8000))
-MCP_NAME = os.getenv("MCP_NAME", "Selenium")
-MCP_DESCRIPTION = os.getenv("MCP_DESCRIPTION", "MCP server providing headless browser automation via Selenium.")
-MCP_VERSION = os.getenv("MCP_VERSION", "1.0.0")
+PORT = int(os.getenv("PORT", "10000"))
 CHROME_PATH = os.getenv("CHROME_PATH", "/opt/render/project/src/.local/chrome/chrome-linux/chrome")
-HEADLESS = os.getenv("HEADLESS", "1") == "1"
+CHROME_VERSION = os.getenv("CHROME_VERSION", "120")
+DRY_RUN = os.getenv("DRY_RUN", "false").lower() == "true"
 
-app = FastAPI(title=MCP_NAME)
+# ==========================================================
+#  STARTUP LOGGING
+# ==========================================================
+print("==========================================================")
+print("[INFO] Starting Selenium MCP Server...")
+print(f"[INFO] Description: MCP server providing headless browser automation via Selenium.")
+print(f"[INFO] Version: 1.0.0")
+print(f"[INFO] Python Runtime: {os.getenv('PYTHON_VERSION', 'Unknown')}")
+print(f"[INFO] Chrome Binary: {CHROME_PATH}")
+print(f"[INFO] Chrome Version (env): {CHROME_VERSION}")
+print(f"[INFO] DRY_RUN Mode: {DRY_RUN}")
+print("==========================================================")
 
-# ----------------------------------------------------------
-# 2️⃣ Startup Logging
-# ----------------------------------------------------------
-@app.on_event("startup")
-async def startup_event():
-    print("==========================================================")
-    print(f"[INFO] Starting Selenium MCP Server...")
-    print(f"[INFO] Description: {MCP_DESCRIPTION}")
-    print(f"[INFO] Version: {MCP_VERSION}")
-    print(f"[INFO] Python Runtime: {platform.python_version()}")
-    print(f"[INFO] Chrome Binary: {CHROME_PATH}")
-    print(f"[INFO] PORT: {PORT}")
-    print("==========================================================")
-    time.sleep(1.0)
 
-# ----------------------------------------------------------
-# 3️⃣ Root Endpoint
-# ----------------------------------------------------------
+# ==========================================================
+#  ROOT ENDPOINT
+# ==========================================================
 @app.get("/")
-async def root():
+def root():
     return {
         "status": "running",
-        "message": f"{MCP_NAME} MCP Server is live.",
-        "runtime": platform.python_version(),
+        "message": "Selenium MCP Server is live.",
+        "runtime": os.getenv("PYTHON_VERSION", "unknown"),
         "chrome_path": CHROME_PATH,
     }
 
-# ----------------------------------------------------------
-# 4️⃣ /mcp/schema (GET + POST)
-# ----------------------------------------------------------
-@app.api_route("/mcp/schema", methods=["GET", "POST"])
-async def mcp_schema(request: Request = None):
+
+# ==========================================================
+#  MCP SCHEMA (GET + POST)
+# ==========================================================
+@app.get("/mcp/schema")
+@app.post("/mcp/schema")
+def get_schema():
     schema = {
         "version": "2025-10-01",
         "type": "mcp",
         "server_info": {
-            "name": MCP_NAME,
-            "description": MCP_DESCRIPTION,
-            "version": MCP_VERSION,
-            "runtime": platform.python_version(),
-        },
-        "capabilities": {
-            "invocation": True,
-            "streaming": False,
-            "multi_tool": False
+            "type": "mcp_server",
+            "name": "Selenium",
+            "description": "MCP server providing headless browser automation via Selenium.",
+            "version": "1.0.0",
+            "runtime": os.getenv("PYTHON_VERSION", "unknown"),
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False,
+            },
         },
         "tools": [
             {
@@ -79,66 +74,70 @@ async def mcp_schema(request: Request = None):
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "url": {"type": "string"}
-                    },
-                    "required": ["url"]
-                }
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
+                },
             }
-        ]
+        ],
     }
-    print(f"[INFO] Served /mcp/schema for {MCP_NAME} (Agent Builder compatible)")
+    print("[INFO] Served /mcp/schema for Selenium (Agent Builder spec compliant)")
     return JSONResponse(content=schema)
 
-@app.get("/mcp/schema")
-async def mcp_schema_get():
-    return await mcp_schema()
 
-# ----------------------------------------------------------
-# 5️⃣ /mcp/invoke — Execute a Tool
-# ----------------------------------------------------------
+# ==========================================================
+#  MCP INVOKE (main handler)
+# ==========================================================
 @app.post("/mcp/invoke")
-async def mcp_invoke(request: Request):
+def mcp_invoke(request: Request):
     try:
-        data = await request.json()
-        tool = data.get("tool")
-        args = data.get("arguments", {})
+        payload = json.loads(request.body().decode("utf-8"))
+        tool = payload.get("tool")
+        args = payload.get("arguments", {})
+        url = args.get("url")
 
         if tool != "selenium_open_page":
-            return JSONResponse(status_code=400, content={"detail": f"Unknown tool: {tool}"})
+            return JSONResponse(status_code=400, content={"error": f"Unknown tool '{tool}'"})
 
-        url = args.get("url")
         if not url:
-            return JSONResponse(status_code=400, content={"detail": "Missing 'url' argument."})
+            return JSONResponse(status_code=400, content={"error": "Missing required argument: url"})
 
-        print(f"[INFO] Launching headless Chrome for URL: {url}")
+        print(f"[INFO] Invoking selenium_open_page for: {url}")
 
+        # DRY RUN MODE (for MCP/Agent Builder validation)
+        if DRY_RUN:
+            print("[INFO] DRY_RUN active — returning simulated response.")
+            return JSONResponse(content={"result": {"url": url, "title": "Simulated Title (DRY_RUN)"}})
+
+        # Configure Chrome options
         chrome_options = Options()
-        if HEADLESS:
-            chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument(f"--user-data-dir=/tmp/chrome-user")
-        chrome_options.add_argument(f"--remote-debugging-port=9222")
-
-        # Dynamic Chrome binary and driver version matching
         chrome_options.binary_location = CHROME_PATH
-        chrome_version = "120.0.6099.18"  # fallback known-good
-        try:
-            service = Service(ChromeDriverManager(version=chrome_version).install())
-        except Exception as e:
-            print(f"[WARN] Falling back to auto ChromeDriverManager: {e}")
-            service = Service(ChromeDriverManager().install())
 
+        # Try dynamic ChromeDriver installation (matching version)
+        print(f"[INFO] Attempting to install ChromeDriver matching version {CHROME_VERSION}...")
+        try:
+            service = Service(ChromeDriverManager(version=CHROME_VERSION).install())
+        except Exception as e:
+            print(f"[WARN] webdriver-manager failed: {e}")
+            print("[INFO] Falling back to manual ChromeDriver 120 download...")
+            os.system(
+                "mkdir -p /tmp/chromedriver && cd /tmp/chromedriver && "
+                "curl -O https://storage.googleapis.com/chrome-for-testing-public/120.0.6099.18/linux64/chromedriver-linux64.zip && "
+                "unzip -o chromedriver-linux64.zip && mv chromedriver-linux64/chromedriver ."
+            )
+            service = Service("/tmp/chromedriver/chromedriver")
+
+        # Launch browser
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(15)
         driver.get(url)
         title = driver.title
         driver.quit()
 
-        print(f"[INFO] Page loaded: {title}")
+        print(f"[SUCCESS] Opened {url} — Title: {title}")
         return JSONResponse(content={"result": {"url": url, "title": title}})
 
     except Exception as e:
@@ -146,10 +145,20 @@ async def mcp_invoke(request: Request):
         return JSONResponse(status_code=500, content={"detail": f"500: Chrome could not start in current environment: {e}"})
 
 
-# ----------------------------------------------------------
-# 6️⃣ Server Startup
-# ----------------------------------------------------------
+# ==========================================================
+#  STARTUP DELAY (Render cold-start safety)
+# ==========================================================
+@app.on_event("startup")
+def startup_event():
+    print("[INFO] Performing cold-start warmup delay...")
+    time.sleep(3)
+    print("[INFO] Selenium MCP startup complete.")
+
+
+# ==========================================================
+#  MAIN ENTRY POINT
+# ==========================================================
 if __name__ == "__main__":
     import uvicorn
-    print("[INFO] Launching MCP Server...")
+    print(f"[INFO] Launching MCP Server on port {PORT} ...")
     uvicorn.run("server:app", host="0.0.0.0", port=PORT)
