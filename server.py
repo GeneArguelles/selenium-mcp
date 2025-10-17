@@ -87,10 +87,14 @@ def get_schema():
 # ==========================================================
 #  MCP INVOKE (main handler)
 # ==========================================================
+# ==========================================================
+#  MCP INVOKE (main handler)
+# ==========================================================
 @app.post("/mcp/invoke")
-def mcp_invoke(request: Request):
+async def mcp_invoke(request: Request):
     try:
-        payload = json.loads(request.body().decode("utf-8"))
+        body = await request.body()
+        payload = json.loads(body.decode("utf-8"))
         tool = payload.get("tool")
         args = payload.get("arguments", {})
         url = args.get("url")
@@ -140,6 +144,8 @@ def mcp_invoke(request: Request):
         print(f"[SUCCESS] Opened {url} — Title: {title}")
         return JSONResponse(content={"result": {"url": url, "title": title}})
 
+    except json.JSONDecodeError:
+        return JSONResponse(status_code=400, content={"detail": "Invalid JSON payload received."})
     except Exception as e:
         print(f"[ERROR] {e}")
         return JSONResponse(status_code=500, content={"detail": f"500: Chrome could not start in current environment: {e}"})
