@@ -101,6 +101,64 @@ class InvokeRequest(BaseModel):
 
 
 # ==========================================================
+# MCP Schema Endpoint (GET/POST/OPTIONS, Builder + CORS safe)
+# ==========================================================
+@app.api_route("/mcp/schema", methods=["GET", "POST", "OPTIONS"])
+def mcp_schema():
+    """
+    Return the MCP tool schema for this Selenium service.
+
+    We explicitly return JSON with permissive CORS headers and identity encoding
+    to satisfy Agent Builder’s fetch (no gzip assumptions).
+    """
+    schema = {
+        "version": "2025-10-01",
+        "type": "mcp_server",
+        "server_info": {
+            "type": "mcp_server",
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False,
+            },
+        },
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"],
+                },
+            }
+        ],
+    }
+
+    # CORS + encoding headers for Agent Builder compatibility
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Encoding": "identity",
+    }
+
+    # Short-circuit OPTIONS preflight
+    if "OPTIONS" == os.getenv("REQUEST_METHOD", "").upper():
+        return JSONResponse(status_code=204, content=None, headers=headers)
+
+    print("[INFO] Served /mcp/schema (Agent Builder spec compliant)")
+    return JSONResponse(content=schema, headers=headers)
+
+
+# ==========================================================
 # MCP Schema Endpoint (supports GET, POST, OPTIONS)
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "OPTIONS"])
