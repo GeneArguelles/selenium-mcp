@@ -83,6 +83,42 @@ def health_check():
         "chrome_path": CHROME_BINARY,
     }
 
+
+# ==========================================================
+# Root Manifest (GET + POST for Agent Builder discovery)
+# ==========================================================
+from fastapi.responses import JSONResponse
+
+@app.api_route("/", methods=["GET", "POST"])
+def root_manifest():
+    """
+    Root manifest for OpenAI Agent Builder (supports both GET and POST).
+    """
+    print("[INFO] Served root manifest at /")
+    manifest = {
+        "version": "2025-10-01",
+        "type": "mcp_server",
+        "server_info": {
+            "type": "mcp_server",
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False,
+            },
+        },
+        "endpoints": {
+            "schema": "/mcp/schema",
+            "invoke": "/mcp/invoke",
+            "health": "/health"
+        },
+    }
+    return JSONResponse(content=manifest)
+
+
 # ==========================================================
 # Root Manifest (required for MCP discovery)
 # ==========================================================
