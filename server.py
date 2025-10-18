@@ -84,8 +84,9 @@ def health_check():
         "chrome_path": CHROME_BINARY,
     }
 
+
 # ==========================================================
-# MCP Schema + Invocation Models
+# MCP Schema + Invocation Models 
 # ==========================================================
 
 class SchemaResponse(BaseModel):
@@ -93,7 +94,6 @@ class SchemaResponse(BaseModel):
     type: str
     server_info: dict
     tools: list
-
 
 class InvokeRequest(BaseModel):
     tool: str
