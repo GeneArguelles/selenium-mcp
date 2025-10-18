@@ -167,6 +167,9 @@ def on_startup():
     print("==========================================================")
     print("[INFO] Selenium MCP startup complete.")
 
+@app.on_event("startup")
+async def signal_ready():
+    print("[READY] MCP HTTP service online and accepting requests.")
 
 # ==========================================================
 # Entry Point for Render Deployment

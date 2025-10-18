@@ -1,90 +1,78 @@
 #!/usr/bin/env bash
+# ==========================================================
+# start.sh — Unified MCP Startup Script (Render + Local)
+# ==========================================================
+
 set -e
-
-# ==========================================================
-# start.sh — Unified MCP Startup Script (v4.0)
-# ==========================================================
-
 START_TIME=$(date +%s)
+DEPLOY_DIR="logs/deploy_$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$DEPLOY_DIR"
+
 echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
 
 # ----------------------------------------------------------
-# 1️⃣ Load environment variables
+# 1️⃣ Load environment
 # ----------------------------------------------------------
 echo "[INFO] Loading .env environment variables..."
-if [ -f .env ]; then
-  set -o allexport
+if [ -f ".env" ]; then
+  set -a
   source .env
-  set +o allexport
+  set +a
 else
-  echo "[WARN] .env file not found — using defaults."
+  echo "[WARN] No .env file found — using defaults."
 fi
 
-DEPLOY_DIR="logs/deploy_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$DEPLOY_DIR"
-
 # ----------------------------------------------------------
-# 2️⃣ Log rotation (keep last 3)
+# 2️⃣ Rotate logs (keep last 3)
 # ----------------------------------------------------------
 echo "[INFO] Rotating logs (keeping last 3)..."
 mkdir -p logs
-cd logs
-ls -1dt deploy_* 2>/dev/null | tail -n +4 | xargs -r rm -rf || true
-cd ..
+ls -dt logs/deploy_* 2>/dev/null | tail -n +4 | xargs -r rm -rf
 echo "[INFO] Logs rotated. Active folder: $DEPLOY_DIR"
 
 # ----------------------------------------------------------
-# 3️⃣ Environment context
+# 3️⃣ Environment detection
 # ----------------------------------------------------------
-if [ "${LOCAL_MODE,,}" = "true" ]; then
-  echo "[💻] Running in Local (macOS) mode ..."
-  CHROME_BINARY="${LOCAL_CHROME_BINARY:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+if [ "${LOCAL_MODE}" = "true" ]; then
+  echo "[💻] Running in Local mode ..."
 else
   echo "[☁️] Running in Render (server) mode ..."
-  CHROME_BINARY="${CHROME_BINARY:-/opt/render/project/src/.local/chrome/chrome-linux/chrome}"
 fi
 
 # ----------------------------------------------------------
-# 4️⃣ ChromeDriver Installer (self-healing)
+# 4️⃣ ChromeDriver installer
 # ----------------------------------------------------------
 echo "[INFO] Starting ChromeDriver auto-installer..."
-ARCH=$(uname -m)
-if [ "$ARCH" = "arm64" ]; then
-  PLATFORM="mac-arm64"
-elif [[ "$OSTYPE" == "darwin"* ]]; then
-  PLATFORM="mac-x64"
-else
-  PLATFORM="linux64"
-fi
+python3 - <<'PYCODE'
+import os, zipfile, urllib.request, pathlib
 
-CHROME_VERSION=${CHROME_VERSION:-120.0.6099.18}
-ZIP_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${PLATFORM}/chromedriver-${PLATFORM}.zip"
+chrome_version = os.getenv("CHROME_VERSION", "120.0.6099.18")
+arch = "linux64"
+url = f"https://storage.googleapis.com/chrome-for-testing-public/{chrome_version}/{arch}/chromedriver-{arch}.zip"
+target_dir = pathlib.Path("chromedriver")
+target_dir.mkdir(exist_ok=True)
+zip_path = target_dir / "chromedriver.zip"
 
-mkdir -p chromedriver
-curl -sSL "$ZIP_URL" -o /tmp/chromedriver.zip
-unzip -qo /tmp/chromedriver.zip -d /tmp/chromedriver_pkg
-mv -f /tmp/chromedriver_pkg/chromedriver*/chromedriver ./chromedriver/chromedriver
-chmod +x ./chromedriver/chromedriver
-rm -rf /tmp/chromedriver.zip /tmp/chromedriver_pkg
-echo "[INFO] ✅ ChromeDriver installation complete!"
-./chromedriver/chromedriver --version || true
+print(f"[INFO] Download URL: {url}")
+urllib.request.urlretrieve(url, zip_path)
+with zipfile.ZipFile(zip_path, "r") as zip_ref:
+    zip_ref.extractall(target_dir)
+zip_path.unlink()
+print(f"[INFO] ✅ ChromeDriver installation complete!")
+os.system("chromedriver/chromedriver --version")
+PYCODE
 
 # ----------------------------------------------------------
 # 5️⃣ Chrome binary validation
 # ----------------------------------------------------------
+CHROME_BINARY=${CHROME_BINARY:-/opt/render/project/src/.local/chrome/chrome-linux/chrome}
 if [ -x "$CHROME_BINARY" ]; then
   echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
 else
-  echo "[WARN] Chrome binary not found at $CHROME_BINARY — attempting fallback..."
-  FALLBACK="/usr/bin/google-chrome"
-  if [ -x "$FALLBACK" ]; then
-    CHROME_BINARY="$FALLBACK"
-    echo "[INFO] ✅ Using fallback Chrome binary: $CHROME_BINARY"
-  else
-    echo "[ERROR] ❌ No valid Chrome binary found. Continuing but MCP may fail."
-  fi
+  echo "[ERROR] ❌ Chrome binary missing or not executable: $CHROME_BINARY"
+  exit 1
 fi
 
 # ----------------------------------------------------------
@@ -94,42 +82,25 @@ echo "[INFO] Launching MCP Server..."
 python3 server.py >"$DEPLOY_DIR/mcp.log" 2>&1 &
 SERVER_PID=$!
 
-# Wait until port is open (max 30s)
-PORT=${PORT:-10000}
-echo "[INFO] Waiting for port ${PORT} to open..."
-for i in {1..30}; do
-  if nc -z 127.0.0.1 $PORT 2>/dev/null; then
-    echo "[INFO] Port ${PORT} is now open (after ${i}s)."
+# ----------------------------------------------------------
+# 7️⃣ Wait for READY signal in log (max 45s)
+# ----------------------------------------------------------
+echo "[INFO] Waiting for MCP server to report READY..."
+for i in {1..45}; do
+  if grep -q "\[READY\]" "$DEPLOY_DIR/mcp.log"; then
+    echo "[INFO] MCP reported READY (after ${i}s)."
     break
   fi
   sleep 1
 done
 
 # ----------------------------------------------------------
-# 7️⃣ Health Retry Loop (non-fatal)
-# ----------------------------------------------------------
-HEALTH_URL="http://127.0.0.1:${PORT}/health"
-RETRIES=5
-SLEEP_INTERVAL=4
-FAIL_COUNT=0
-
-for i in $(seq 1 $RETRIES); do
-  echo "[INFO] Checking MCP health (attempt ${i}/${RETRIES})..."
-  if curl -s --max-time 5 "$HEALTH_URL" | grep -q '"status": "healthy"'; then
-    echo "[✅ HEALTHY] MCP responded successfully."
-    break
-  else
-    echo "[WARN] MCP not ready yet, retrying in ${SLEEP_INTERVAL}s..."
-    ((FAIL_COUNT++))
-    sleep "$SLEEP_INTERVAL"
-  fi
-done
-
-# ----------------------------------------------------------
 # 8️⃣ Final Health Summary
 # ----------------------------------------------------------
+PORT=${PORT:-10000}
+HEALTH_URL="http://127.0.0.1:${PORT}/health"
 echo "----------------------------------------------------------"
-if curl -s "$HEALTH_URL" | grep -q '"status": "healthy"'; then
+if curl -s --max-time 5 "$HEALTH_URL" | grep -q '"status": "healthy"'; then
   ELAPSED=$(( $(date +%s) - START_TIME ))
   echo "[✅ HEALTHY] MCP is running (phase: ready, uptime: ${ELAPSED}s)"
   echo "[CHROME] $CHROME_BINARY"
