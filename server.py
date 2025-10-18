@@ -6,8 +6,8 @@ import os
 import platform
 import time
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -15,103 +15,79 @@ from selenium.webdriver.chrome.options import Options
 from dotenv import load_dotenv
 
 # ==========================================================
-# 1️⃣ Environment Setup
+# Environment Setup
 # ==========================================================
 load_dotenv()
+
 APP_START_TIME = time.time()
 
 app = FastAPI(title="Selenium MCP Server")
 
-# ==========================================================
-# 2️⃣ Explicit OPTIONS handler (must come before middleware)
-# ==========================================================
-@app.options("/mcp/schema")
-def preflight_schema():
-    headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-    }
-    return Response(status_code=204, headers=headers)
-
-# ==========================================================
-# 3️⃣ CORS Middleware
-# ==========================================================
+# Enable full CORS for Agent Builder / browser tools
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_credentials=True,
+    allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Type", "Access-Control-Allow-Origin"],
-    allow_credentials=False,
-    max_age=86400,
 )
 
-# ==========================================================
-# 4️⃣ Environment Variable Handling
-# ==========================================================
 SERVER_NAME = os.getenv("SERVER_NAME", "Selenium")
 SERVER_DESC = os.getenv(
     "SERVER_DESC", "MCP server providing headless browser automation via Selenium."
 )
 LOCAL_MODE = os.getenv("LOCAL_MODE", "false").lower() == "true"
 
+# ==========================================================
+# Chrome Binary Validation (Render + Local fallback)
+# ==========================================================
 if LOCAL_MODE:
     CHROME_BINARY = os.getenv(
-        "LOCAL_CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        "LOCAL_CHROME_BINARY",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     )
-    CHROMEDRIVER_PATH = os.getenv("LOCAL_CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
+    CHROMEDRIVER_PATH = os.getenv(
+        "LOCAL_CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver"
+    )
 else:
     CHROME_BINARY = os.getenv(
-        "CHROME_BINARY", "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
+        "CHROME_BINARY",
+        "/opt/render/project/src/.local/chrome/chrome-linux/chrome",
     )
     CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "./chromedriver/chromedriver")
 
-# ==========================================================
-# Chrome Binary Validation (Auto-detect for Render)
-# ==========================================================
+# Validate Chrome binary presence
 if not os.path.exists(CHROME_BINARY):
-    print(f"[WARN] Chrome binary not found at {CHROME_BINARY}. Searching fallback locations...")
-
-    # Try known Render Playwright paths
-    candidate_paths = [
-        "/opt/render/project/src/.local-browsers/chromium-1200/chrome-linux/chrome",
-        "/opt/render/project/src/.local-browsers/chromium-*/chrome-linux/chrome",
-        "/usr/bin/google-chrome",
-        "/usr/local/bin/chrome",
-    ]
-
-    found = False
-    for path in candidate_paths:
-        expanded = os.popen(f"ls {path} 2>/dev/null").read().strip()
-        if expanded and os.path.exists(expanded):
-            CHROME_BINARY = expanded
-            found = True
-            print(f"[INFO] ✅ Found Chrome binary at: {CHROME_BINARY}")
-            break
-
-    if not found:
-        print("[ERROR] ❌ No valid Chrome binary found in known locations.")
+    print(f"[WARN] Chrome binary not found at {CHROME_BINARY}. Attempting fallback...")
+    fallback_path = "/usr/bin/google-chrome"
+    if os.path.exists(fallback_path):
+        CHROME_BINARY = fallback_path
+        print(f"[INFO] ✅ Using fallback Chrome binary: {CHROME_BINARY}")
+    else:
+        print(f"[ERROR] ❌ No valid Chrome binary found.")
 else:
     print(f"[INFO] ✅ Chrome binary confirmed: {CHROME_BINARY}")
 
 # ==========================================================
-# 5️⃣ Health Endpoint
+# Health and Diagnostics
 # ==========================================================
+
 @app.get("/health")
 def health_check():
     uptime = round(time.time() - APP_START_TIME, 2)
     chrome_ok = os.path.exists(CHROME_BINARY)
+    phase = "ready" if chrome_ok else "starting"
     return {
         "status": "healthy" if chrome_ok else "unhealthy",
-        "phase": "ready",
+        "phase": phase,
         "uptime_seconds": uptime,
         "chrome_path": CHROME_BINARY,
     }
 
 # ==========================================================
-# 6️⃣ MCP Schema and Invocation Models
+# MCP Schema + Invocation Models
 # ==========================================================
+
 class SchemaResponse(BaseModel):
     version: str
     type: str
@@ -123,12 +99,18 @@ class InvokeRequest(BaseModel):
     tool: str
     arguments: dict
 
+
 # ==========================================================
-# 7️⃣ /mcp/schema Endpoint
+# MCP Schema Endpoint (supports GET, POST, OPTIONS)
 # ==========================================================
-@app.post("/mcp/schema")
+@app.api_route("/mcp/schema", methods=["GET", "POST", "OPTIONS"])
 def get_schema():
+    """
+    Return the MCP tool schema for this Selenium service.
+    Fully CORS- and Agent Builder–compatible.
+    """
     print("[INFO] Served /mcp/schema for Selenium (Agent Builder spec compliant)")
+
     schema = {
         "version": "2025-10-01",
         "type": "mcp_server",
@@ -156,14 +138,26 @@ def get_schema():
             }
         ],
     }
-    headers = {"Access-Control-Allow-Origin": "*"}
+
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }
+
+    if app.debug:
+        print("[DEBUG] OPTIONS preflight handled for /mcp/schema")
+
     return JSONResponse(content=schema, headers=headers)
 
 # ==========================================================
-# 8️⃣ /mcp/invoke Endpoint
+# Selenium Tool Implementation
 # ==========================================================
 @app.post("/mcp/invoke")
 def invoke_tool(request: InvokeRequest):
+    """
+    Execute a tool (e.g., selenium_open_page) via Selenium.
+    """
     if request.tool == "selenium_open_page":
         url = request.arguments.get("url")
         if not url:
@@ -188,7 +182,7 @@ def invoke_tool(request: InvokeRequest):
     raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
 
 # ==========================================================
-# 9️⃣ Startup Event + Diagnostics
+# Startup Info
 # ==========================================================
 @app.on_event("startup")
 def on_startup():
@@ -203,10 +197,8 @@ def on_startup():
     print("[INFO] Selenium MCP startup complete.")
 
 # ==========================================================
-# 10️⃣ Uvicorn Entrypoint (for Render)
+# Uvicorn Entrypoint
 # ==========================================================
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", "10000"))
-    print(f"[INFO] 🚀 Launching Uvicorn server on 0.0.0.0:{port}")
-    uvicorn.run("server:app", host="0.0.0.0", port=port, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=10000)
