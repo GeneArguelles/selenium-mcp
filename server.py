@@ -93,6 +93,7 @@ from fastapi.responses import JSONResponse
 def root_manifest():
     """
     Root manifest for OpenAI Agent Builder (supports both GET and POST).
+    Ensures absolute schema_url and correct Content-Type.
     """
     print("[INFO] Served root manifest at /")
     manifest = {
@@ -110,11 +111,12 @@ def root_manifest():
                 "multi_tool": False,
             },
         },
-        # ✅ Explicit Agent Builder handshake requirements
-        "schema_url": "/mcp/schema",
-        "tools": []  # must exist (even empty)
+        # ✅ Full absolute schema URL
+        "schema_url": "https://selenium-mcp.onrender.com/mcp/schema",
+        "tools": [],
     }
-    return JSONResponse(content=manifest)
+    # ✅ Explicit content-type enforcement
+    return JSONResponse(content=manifest, media_type="application/json")
 
 
 # ==========================================================
