@@ -260,3 +260,19 @@ def on_startup():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000)
+
+
+# ==========================================================
+# Entry Point for Render / Local Run
+# ==========================================================
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", "10000"))
+    print(f"[INFO] 🚀 Launching Uvicorn server on port {port}...")
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=port,
+        reload=False,
+        log_level="info",
+    )
