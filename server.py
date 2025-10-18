@@ -173,11 +173,17 @@ def on_startup():
 # ==========================================================
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", "10000"))
-    print(f"[BOOT] Launching Uvicorn on 0.0.0.0:{port}")
+    host = "0.0.0.0"
+
+    print("==========================================================")
+    print(f"[BOOT] Launching Uvicorn on {host}:{port}")
+    print("==========================================================")
+
     uvicorn.run(
-        "server:app",
-        host="0.0.0.0",
+        app,                  # directly pass the app, not "server:app"
+        host=host,
         port=port,
         reload=False,
         log_level="info",
