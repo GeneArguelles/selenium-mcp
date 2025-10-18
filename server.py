@@ -67,15 +67,31 @@ else:
     )
     CHROMEDRIVER_PATH = os.getenv("CHROMEDRIVER_PATH", "./chromedriver/chromedriver")
 
-# Validate Chrome binary presence
+# ==========================================================
+# Chrome Binary Validation (Auto-detect for Render)
+# ==========================================================
 if not os.path.exists(CHROME_BINARY):
-    print(f"[WARN] Chrome binary not found at {CHROME_BINARY}. Attempting fallback...")
-    fallback_path = "/usr/bin/google-chrome"
-    if os.path.exists(fallback_path):
-        CHROME_BINARY = fallback_path
-        print(f"[INFO] ✅ Using fallback Chrome binary: {CHROME_BINARY}")
-    else:
-        print(f"[ERROR] ❌ No valid Chrome binary found.")
+    print(f"[WARN] Chrome binary not found at {CHROME_BINARY}. Searching fallback locations...")
+
+    # Try known Render Playwright paths
+    candidate_paths = [
+        "/opt/render/project/src/.local-browsers/chromium-1200/chrome-linux/chrome",
+        "/opt/render/project/src/.local-browsers/chromium-*/chrome-linux/chrome",
+        "/usr/bin/google-chrome",
+        "/usr/local/bin/chrome",
+    ]
+
+    found = False
+    for path in candidate_paths:
+        expanded = os.popen(f"ls {path} 2>/dev/null").read().strip()
+        if expanded and os.path.exists(expanded):
+            CHROME_BINARY = expanded
+            found = True
+            print(f"[INFO] ✅ Found Chrome binary at: {CHROME_BINARY}")
+            break
+
+    if not found:
+        print("[ERROR] ❌ No valid Chrome binary found in known locations.")
 else:
     print(f"[INFO] ✅ Chrome binary confirmed: {CHROME_BINARY}")
 
