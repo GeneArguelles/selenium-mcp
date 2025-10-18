@@ -154,6 +154,61 @@ def root_manifest(request=None):
 
 
 # ==========================================================
+# /live Alias Endpoint (Cache-buster for OpenAI Agent Builder)
+# ==========================================================
+from fastapi.responses import JSONResponse
+
+@app.get("/live")
+@app.post("/live")
+def live_manifest():
+    """
+    Live alias for root manifest. Returns identical payload with cache-busting
+    headers and a unique schema_url param to force fresh MCP discovery.
+    """
+    print("[INFO] Served /live manifest (cache-buster for Agent Builder)")
+
+    manifest = {
+        "version": "2025-10-01",
+        "type": "mcp_server",
+        "server_info": {
+            "type": "mcp_server",
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False,
+            },
+        },
+        # cache-busting schema_url (forces Agent Builder to re-fetch)
+        "schema_url": f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'selenium-mcp.onrender.com')}/mcp/schema?v={int(time.time())}",
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"],
+                },
+            }
+        ],
+    }
+
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    }
+
+    return JSONResponse(content=manifest, headers=headers)
+
+
+# ==========================================================
 # Root Manifest (required for MCP discovery)
 # ==========================================================
 @app.get("/")
