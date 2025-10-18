@@ -43,6 +43,23 @@ if not CHROME_BINARY:
 else:
     print(f"[INFO] ✅ Chrome binary confirmed from .env: {CHROME_BINARY}")
 
+
+# ==========================================================
+# Global CORS Configuration
+# ==========================================================
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "*",                         # or narrow to https://agentbuilder.openai.com
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS", "DELETE", "PUT", "PATCH"],
+    allow_headers=["*"],
+)
+
+
 # ==========================================================
 # FastAPI Initialization + CORS
 # ==========================================================
@@ -120,6 +137,23 @@ def get_schema():
     }
     return JSONResponse(content=schema)
 
+
+# ==========================================================
+# /mcp/schema — CORS preflight
+# ==========================================================
+@app.options("/mcp/schema")
+async def schema_options():
+    print("[INFO] Handled OPTIONS /mcp/schema preflight")
+    return JSONResponse(
+        content={"status": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+    )
+
+
 # ==========================================================
 # /mcp/invoke — Executes a Selenium automation command
 # ==========================================================
@@ -148,6 +182,23 @@ def invoke_tool(req: InvokeRequest):
             return JSONResponse(status_code=500, content={"error": str(e)})
 
     return JSONResponse(status_code=400, content={"error": f"Unknown tool: {req.tool}"})
+
+
+# ==========================================================
+# /mcp/invoke — CORS preflight
+# ==========================================================
+@app.options("/mcp/invoke")
+async def invoke_options():
+    print("[INFO] Handled OPTIONS /mcp/invoke preflight")
+    return JSONResponse(
+        content={"status": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+    )
+
 
 # ==========================================================
 # / — Root Manifest (Self-contained for Agent Builder)
