@@ -110,11 +110,8 @@ def root_manifest():
                 "multi_tool": False,
             },
         },
-        "endpoints": {
-            "schema": "/mcp/schema",
-            "invoke": "/mcp/invoke",
-            "health": "/health"
-        },
+        # ✅ Agent Builder expects this explicit key, not "endpoints"
+        "schema_url": "/mcp/schema"
     }
     return JSONResponse(content=manifest)
 
