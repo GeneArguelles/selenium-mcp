@@ -12,11 +12,15 @@ echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
 
 # ----------------------------------------------------------
-# 1️⃣ Load environment
+# 1️⃣ Load environment (.env with safe quoting)
 # ----------------------------------------------------------
 echo "[INFO] Loading .env environment variables..."
 if [ -f ".env" ]; then
-  export $(grep -v '^#' .env | xargs)
+  echo "[INFO] .env found — loading safely (preserving spaces)..."
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
 else
   echo "[WARN] .env file not found — continuing with environment defaults."
 fi
