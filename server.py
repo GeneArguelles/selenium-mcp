@@ -110,8 +110,9 @@ def root_manifest():
                 "multi_tool": False,
             },
         },
-        # ✅ Agent Builder expects this explicit key, not "endpoints"
-        "schema_url": "/mcp/schema"
+        # ✅ Explicit Agent Builder handshake requirements
+        "schema_url": "/mcp/schema",
+        "tools": []  # must exist (even empty)
     }
     return JSONResponse(content=manifest)
 
