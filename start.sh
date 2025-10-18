@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
+set -e
+
 # ==========================================================
-# start.sh — Unified MCP Startup Script (Render + Local)
+#  Selenium MCP Server - Render Startup Script
 # ==========================================================
 
-set -e
 START_TIME=$(date +%s)
-DEPLOY_DIR="logs/deploy_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$DEPLOY_DIR"
 
 echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
@@ -17,82 +16,71 @@ echo "=========================================================="
 # ----------------------------------------------------------
 echo "[INFO] Loading .env environment variables..."
 if [ -f ".env" ]; then
-  set -a
-  source .env
-  set +a
+  export $(grep -v '^#' .env | xargs)
 else
-  echo "[WARN] No .env file found — using defaults."
+  echo "[WARN] .env file not found — continuing with environment defaults."
 fi
 
 # ----------------------------------------------------------
-# 2️⃣ Rotate logs (keep last 3)
+# 2️⃣ Log rotation
 # ----------------------------------------------------------
-echo "[INFO] Rotating logs (keeping last 3)..."
 mkdir -p logs
-ls -dt logs/deploy_* 2>/dev/null | tail -n +4 | xargs -r rm -rf
-echo "[INFO] Logs rotated. Active folder: $DEPLOY_DIR"
+MAX_LOGS=3
+LOG_DIR="logs"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+DEPLOY_LOG="${LOG_DIR}/deploy_${TIMESTAMP}"
+mkdir -p "$DEPLOY_LOG"
+ls -dt ${LOG_DIR}/deploy_* 2>/dev/null | tail -n +$((MAX_LOGS + 1)) | xargs -r rm -rf
+echo "[INFO] Logs rotated. Active folder: ${DEPLOY_LOG}"
 
 # ----------------------------------------------------------
-# 3️⃣ Environment detection
+# 3️⃣ Detect Render environment
 # ----------------------------------------------------------
-if [ "${LOCAL_MODE}" = "true" ]; then
-  echo "[💻] Running in Local mode ..."
-else
+if [[ "$RENDER" == "true" ]]; then
   echo "[☁️] Running in Render (server) mode ..."
+else
+  echo "[💻] Running in Local mode ..."
 fi
 
 # ----------------------------------------------------------
-# 4️⃣ ChromeDriver installer
+# 4️⃣ ChromeDriver auto-installation
 # ----------------------------------------------------------
 echo "[INFO] Starting ChromeDriver auto-installer..."
-python3 - <<'PYCODE'
-import os, zipfile, urllib.request, pathlib
+CHROME_VERSION=${CHROME_VERSION:-120.0.6099.18}
+OS_ARCH=$(uname -m)
+DOWNLOAD_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip"
 
-chrome_version = os.getenv("CHROME_VERSION", "120.0.6099.18")
-arch = "linux64"
-url = f"https://storage.googleapis.com/chrome-for-testing-public/{chrome_version}/{arch}/chromedriver-{arch}.zip"
-target_dir = pathlib.Path("chromedriver")
-target_dir.mkdir(exist_ok=True)
-zip_path = target_dir / "chromedriver.zip"
+mkdir -p chromedriver
+wget -q -O /tmp/chromedriver.zip "$DOWNLOAD_URL"
+unzip -qo /tmp/chromedriver.zip -d chromedriver
+rm -f /tmp/chromedriver.zip
+chmod +x chromedriver/chromedriver
 
-print(f"[INFO] Download URL: {url}")
-urllib.request.urlretrieve(url, zip_path)
-with zipfile.ZipFile(zip_path, "r") as zip_ref:
-    zip_ref.extractall(target_dir)
-zip_path.unlink()
-print(f"[INFO] ✅ ChromeDriver installation complete!")
-os.system("chromedriver/chromedriver --version")
-PYCODE
+echo "[INFO] ✅ ChromeDriver installation complete!"
+chromedriver/chromedriver --version || true
 
 # ----------------------------------------------------------
-# 5️⃣ Chrome binary validation
+# 5️⃣ Verify Chrome binary
 # ----------------------------------------------------------
 CHROME_BINARY=${CHROME_BINARY:-/opt/render/project/src/.local/chrome/chrome-linux/chrome}
 if [ -x "$CHROME_BINARY" ]; then
   echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
 else
-  echo "[ERROR] ❌ Chrome binary missing or not executable: $CHROME_BINARY"
-  exit 1
+  echo "[ERROR] ❌ Chrome binary missing or not executable at $CHROME_BINARY"
 fi
 
 # ----------------------------------------------------------
-# 6️⃣ Launch MCP Server (background)
+# 6️⃣ Launch MCP Server
 # ----------------------------------------------------------
 echo "[INFO] Launching MCP Server..."
-python3 server.py >"$DEPLOY_DIR/mcp.log" 2>&1 &
+python3 server.py &
 SERVER_PID=$!
 
 # ----------------------------------------------------------
-# 7️⃣ Wait for READY signal in log (max 45s)
+# 7️⃣ Wait for Uvicorn / FastAPI to come online
 # ----------------------------------------------------------
-echo "[INFO] Waiting for MCP server to report READY..."
-for i in {1..45}; do
-  if grep -q "\[READY\]" "$DEPLOY_DIR/mcp.log"; then
-    echo "[INFO] MCP reported READY (after ${i}s)."
-    break
-  fi
-  sleep 1
-done
+echo "[INFO] Waiting 10s for Uvicorn to initialize..."
+sleep 10
 
 # ----------------------------------------------------------
 # 8️⃣ Final Health Summary
