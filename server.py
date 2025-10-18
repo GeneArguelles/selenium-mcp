@@ -68,6 +68,7 @@ if not os.path.exists(CHROME_BINARY):
 else:
     print(f"[INFO] ✅ Chrome binary confirmed: {CHROME_BINARY}")
 
+
 # ==========================================================
 # Health and Diagnostics
 # ==========================================================
@@ -90,12 +91,15 @@ def health_check():
 from fastapi.responses import JSONResponse
 
 @app.api_route("/", methods=["GET", "POST"])
-def root_manifest():
+def root_manifest(request=None):
     """
-    Root manifest for OpenAI Agent Builder (supports both GET and POST).
-    Ensures absolute schema_url and correct Content-Type.
+    Root manifest for OpenAI Agent Builder.
+    GET: Returns discovery manifest with schema_url
+    POST: Returns full schema directly (for compatibility with Agent Builder handshake)
     """
     print("[INFO] Served root manifest at /")
+
+    # Root manifest (for GET)
     manifest = {
         "version": "2025-10-01",
         "type": "mcp_server",
@@ -111,11 +115,34 @@ def root_manifest():
                 "multi_tool": False,
             },
         },
-        # ✅ Full absolute schema URL
         "schema_url": "https://selenium-mcp.onrender.com/mcp/schema",
         "tools": [],
     }
-    # ✅ Explicit content-type enforcement
+
+    # When the Agent Builder sends POST /, respond with full schema instead
+    if request and request.method == "POST":
+        print("[INFO] Served POST / as /mcp/schema passthrough")
+        schema = {
+            "version": "2025-10-01",
+            "type": "mcp_server",
+            "server_info": manifest["server_info"],
+            "tools": [
+                {
+                    "name": "selenium_open_page",
+                    "description": "Open a URL in a headless Chrome browser and return the page title.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {"type": "string"}
+                        },
+                        "required": ["url"],
+                    },
+                }
+            ],
+        }
+        return JSONResponse(content=schema, media_type="application/json")
+
+    # Otherwise, return the discovery manifest (GET)
     return JSONResponse(content=manifest, media_type="application/json")
 
 
