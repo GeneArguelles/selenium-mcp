@@ -42,22 +42,31 @@ else
   echo "[💻] Running in Local mode ..."
 fi
 
+
 # ----------------------------------------------------------
-# 4️⃣ ChromeDriver installation
+# 4️⃣ ChromeDriver setup (Render-safe, no Python dependency)
 # ----------------------------------------------------------
-echo "[INFO] Starting ChromeDriver auto-installer..."
-python3 - <<'EOF'
-import os
-from chromedriver_binary_auto import install
-print("[INFO] Detected environment:", os.uname().sysname)
-install()
-print("[INFO] ✅ ChromeDriver installation complete!")
-EOF
+echo "[INFO] Checking ChromeDriver binary..."
+
+if [[ -f "$CHROMEDRIVER_PATH" ]]; then
+  echo "[INFO] ✅ ChromeDriver binary already present at $CHROMEDRIVER_PATH"
+else
+  echo "[WARN] ChromeDriver not found — performing manual installation..."
+  mkdir -p "$(dirname "$CHROMEDRIVER_PATH")"
+  CHROME_VERSION=${CHROME_VERSION:-120.0.6099.18}
+  DOWNLOAD_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip"
+  echo "[INFO] Download URL: $DOWNLOAD_URL"
+  curl -L "$DOWNLOAD_URL" -o chromedriver.zip
+  unzip -o chromedriver.zip -d "$(dirname "$CHROMEDRIVER_PATH")"
+  rm chromedriver.zip
+  echo "[INFO] ✅ ChromeDriver installed manually at $CHROMEDRIVER_PATH"
+fi
 
 if [[ ! -f "$CHROMEDRIVER_PATH" ]]; then
-  echo "[ERROR] ❌ ChromeDriver not found at $CHROMEDRIVER_PATH"
+  echo "[ERROR] ❌ ChromeDriver still not found at $CHROMEDRIVER_PATH"
   exit 1
 fi
+
 
 # ----------------------------------------------------------
 # 5️⃣ Validate Chrome binary
