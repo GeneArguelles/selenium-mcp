@@ -6,11 +6,26 @@ import os
 import platform
 import time
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware   # ← NEW
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from dotenv import load_dotenv
+
+load_dotenv()
+
+APP_START_TIME = time.time()
+app = FastAPI(title="Selenium MCP Server")
+
+# NEW — enable CORS for Agent Builder
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ==========================================================
 # Environment Setup
