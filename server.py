@@ -6,26 +6,13 @@ import os
 import platform
 import time
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware   # ← NEW
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from dotenv import load_dotenv
-
-load_dotenv()
-
-APP_START_TIME = time.time()
-app = FastAPI(title="Selenium MCP Server")
-
-# NEW — enable CORS for Agent Builder
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 # ==========================================================
 # Environment Setup
@@ -35,6 +22,14 @@ load_dotenv()
 APP_START_TIME = time.time()
 
 app = FastAPI(title="Selenium MCP Server")
+
+# Enable CORS for OpenAI Agent Builder compatibility
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 SERVER_NAME = os.getenv("SERVER_NAME", "Selenium")
 SERVER_DESC = os.getenv(
@@ -47,7 +42,8 @@ LOCAL_MODE = os.getenv("LOCAL_MODE", "false").lower() == "true"
 # ==========================================================
 if LOCAL_MODE:
     CHROME_BINARY = os.getenv(
-        "LOCAL_CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        "LOCAL_CHROME_BINARY",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     )
     CHROMEDRIVER_PATH = os.getenv("LOCAL_CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
 else:
@@ -71,15 +67,13 @@ else:
 # ==========================================================
 # Health and Diagnostics
 # ==========================================================
-
 @app.get("/health")
 def health_check():
     uptime = round(time.time() - APP_START_TIME, 2)
-    phase = "ready"
     chrome_ok = os.path.exists(CHROME_BINARY)
     return {
         "status": "healthy" if chrome_ok else "unhealthy",
-        "phase": phase,
+        "phase": "ready",
         "uptime_seconds": uptime,
         "chrome_path": CHROME_BINARY,
     }
@@ -87,7 +81,6 @@ def health_check():
 # ==========================================================
 # MCP Schema + Invocation Models
 # ==========================================================
-
 class SchemaResponse(BaseModel):
     version: str
     type: str
@@ -105,8 +98,7 @@ def get_schema():
     """
     Return the MCP tool schema for this Selenium service.
     """
-    print("[INFO] Served /mcp/schema for Selenium (Agent Builder spec compliant)")
-    return {
+    schema = {
         "version": "2025-10-01",
         "type": "mcp_server",
         "server_info": {
@@ -134,10 +126,13 @@ def get_schema():
         ],
     }
 
+    print("[INFO] Served /mcp/schema with 200 OK")
+    return JSONResponse(content=schema, media_type="application/json")
+
+
 # ==========================================================
 # Selenium Tool Implementation
 # ==========================================================
-
 @app.post("/mcp/invoke")
 def invoke_tool(request: InvokeRequest):
     """
@@ -166,10 +161,10 @@ def invoke_tool(request: InvokeRequest):
 
     raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
 
+
 # ==========================================================
 # Startup Info
 # ==========================================================
-
 @app.on_event("startup")
 def on_startup():
     print("==========================================================")
@@ -182,27 +177,13 @@ def on_startup():
     print("==========================================================")
     print("[INFO] Selenium MCP startup complete.")
 
-@app.on_event("startup")
-async def signal_ready():
-    print("[READY] MCP HTTP service online and accepting requests.")
 
 # ==========================================================
-# Entry Point for Render Deployment
+# Local run (for manual testing)
 # ==========================================================
 if __name__ == "__main__":
     import uvicorn
 
     port = int(os.getenv("PORT", "10000"))
-    host = "0.0.0.0"
-
-    print("==========================================================")
-    print(f"[BOOT] Launching Uvicorn on {host}:{port}")
-    print("==========================================================")
-
-    uvicorn.run(
-        app,                  # directly pass the app, not "server:app"
-        host=host,
-        port=port,
-        reload=False,
-        log_level="info",
-    )
+    print(f"[INFO] Launching Uvicorn on port {port} ...")
+    uvicorn.run(app, host="0.0.0.0", port=port)
