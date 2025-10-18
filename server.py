@@ -6,8 +6,8 @@ import os
 import platform
 import time
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -15,35 +15,48 @@ from selenium.webdriver.chrome.options import Options
 from dotenv import load_dotenv
 
 # ==========================================================
-# Environment Setup
+# 1️⃣ Environment Setup
 # ==========================================================
 load_dotenv()
-
 APP_START_TIME = time.time()
 
 app = FastAPI(title="Selenium MCP Server")
 
-# Enable CORS for OpenAI Agent Builder compatibility
+# ==========================================================
+CORS Configuration
+# ==========================================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Content-Type", "Access-Control-Allow-Origin"],
+    allow_credentials=False,
+    max_age=86400,
 )
 
+# --- Explicit OPTIONS handler for /mcp/schema ---
+@app.options("/mcp/schema")
+def options_schema():
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    }
+    return Response(status_code=204, headers=headers)
+
+# ==========================================================
+# 3️⃣  Environment Variable Handling
+# ==========================================================
 SERVER_NAME = os.getenv("SERVER_NAME", "Selenium")
 SERVER_DESC = os.getenv(
     "SERVER_DESC", "MCP server providing headless browser automation via Selenium."
 )
 LOCAL_MODE = os.getenv("LOCAL_MODE", "false").lower() == "true"
 
-# ==========================================================
-# Chrome Binary Validation (Render + Local fallback)
-# ==========================================================
 if LOCAL_MODE:
     CHROME_BINARY = os.getenv(
-        "LOCAL_CHROME_BINARY",
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "LOCAL_CHROME_BINARY", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
     )
     CHROMEDRIVER_PATH = os.getenv("LOCAL_CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
 else:
@@ -65,7 +78,7 @@ else:
     print(f"[INFO] ✅ Chrome binary confirmed: {CHROME_BINARY}")
 
 # ==========================================================
-# Health and Diagnostics
+# 4️⃣  Health Endpoint
 # ==========================================================
 @app.get("/health")
 def health_check():
@@ -79,7 +92,7 @@ def health_check():
     }
 
 # ==========================================================
-# MCP Schema + Invocation Models
+# 5️⃣  MCP Schema and Invocation Models
 # ==========================================================
 class SchemaResponse(BaseModel):
     version: str
@@ -92,12 +105,12 @@ class InvokeRequest(BaseModel):
     tool: str
     arguments: dict
 
-
+# ==========================================================
+# 6️⃣  /mcp/schema Endpoint  ← (RETURNS EXPLICIT JSONResponse)
+# ==========================================================
 @app.post("/mcp/schema")
 def get_schema():
-    """
-    Return the MCP tool schema for this Selenium service.
-    """
+    print("[INFO] Served /mcp/schema for Selenium (Agent Builder spec compliant)")
     schema = {
         "version": "2025-10-01",
         "type": "mcp_server",
@@ -125,19 +138,14 @@ def get_schema():
             }
         ],
     }
-
-    print("[INFO] Served /mcp/schema with 200 OK")
-    return JSONResponse(content=schema, media_type="application/json")
-
+    headers = {"Access-Control-Allow-Origin": "*"}
+    return JSONResponse(content=schema, headers=headers)
 
 # ==========================================================
-# Selenium Tool Implementation
+# 7️⃣  /mcp/invoke Endpoint
 # ==========================================================
 @app.post("/mcp/invoke")
 def invoke_tool(request: InvokeRequest):
-    """
-    Execute a tool (e.g., selenium_open_page) via Selenium.
-    """
     if request.tool == "selenium_open_page":
         url = request.arguments.get("url")
         if not url:
@@ -161,9 +169,8 @@ def invoke_tool(request: InvokeRequest):
 
     raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
 
-
 # ==========================================================
-# Startup Info
+# 8️⃣  Startup Event + Diagnostics
 # ==========================================================
 @app.on_event("startup")
 def on_startup():
@@ -176,14 +183,3 @@ def on_startup():
     print(f"[INFO] ChromeDriver Path: {CHROMEDRIVER_PATH}")
     print("==========================================================")
     print("[INFO] Selenium MCP startup complete.")
-
-
-# ==========================================================
-# Local run (for manual testing)
-# ==========================================================
-if __name__ == "__main__":
-    import uvicorn
-
-    port = int(os.getenv("PORT", "10000"))
-    print(f"[INFO] Launching Uvicorn on port {port} ...")
-    uvicorn.run(app, host="0.0.0.0", port=port)
