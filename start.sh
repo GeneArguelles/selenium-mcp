@@ -1,76 +1,71 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# ==========================================================
+# start.sh — Selenium MCP Render Startup Script
+# ==========================================================
 set -e
-
-# ==========================================================
-#  Selenium MCP Server - Render Startup Script
-# ==========================================================
-
-START_TIME=$(date +%s)
 
 echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
 
 # ----------------------------------------------------------
-# 1️⃣ Load environment (.env with safe quoting)
+# 1️⃣ Load environment variables
 # ----------------------------------------------------------
 echo "[INFO] Loading .env environment variables..."
-if [ -f ".env" ]; then
-  echo "[INFO] .env found — loading safely (preserving spaces)..."
-  set -a
-  # shellcheck disable=SC1091
-  source .env
-  set +a
-else
-  echo "[WARN] .env file not found — continuing with environment defaults."
-fi
+set -a
+source .env 2>/dev/null || true
+set +a
+
+# Ensure Chrome binary paths are quoted properly
+CHROME_BINARY="${CHROME_BINARY:-/opt/render/project/src/.local/chrome/chrome-linux/chrome}"
+CHROMEDRIVER_PATH="${CHROMEDRIVER_PATH:-./chromedriver/chromedriver}"
+PORT="${PORT:-10000}"
+RUN_VALIDATION="${RUN_VALIDATION:-false}"
 
 # ----------------------------------------------------------
-# 2️⃣ Log rotation
+# 2️⃣ Log rotation setup
 # ----------------------------------------------------------
-mkdir -p logs
-MAX_LOGS=3
+echo "[INFO] Rotating logs (keeping last 3)..."
 LOG_DIR="logs"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-DEPLOY_LOG="${LOG_DIR}/deploy_${TIMESTAMP}"
+mkdir -p "$LOG_DIR"
+find "$LOG_DIR" -maxdepth 1 -type d -name "deploy_*" -printf '%T@ %p\n' 2>/dev/null | sort -n | head -n -3 | cut -d' ' -f2 | xargs -r rm -rf
+DEPLOY_LOG="$LOG_DIR/deploy_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$DEPLOY_LOG"
-ls -dt ${LOG_DIR}/deploy_* 2>/dev/null | tail -n +$((MAX_LOGS + 1)) | xargs -r rm -rf
-echo "[INFO] Logs rotated. Active folder: ${DEPLOY_LOG}"
+echo "[INFO] Logs rotated. Active folder: $DEPLOY_LOG"
 
 # ----------------------------------------------------------
-# 3️⃣ Detect Render environment
+# 3️⃣ Environment diagnostics
 # ----------------------------------------------------------
-if [[ "$RENDER" == "true" ]]; then
+if [[ -n "$RENDER" ]]; then
   echo "[☁️] Running in Render (server) mode ..."
 else
   echo "[💻] Running in Local mode ..."
 fi
 
 # ----------------------------------------------------------
-# 4️⃣ ChromeDriver auto-installation
+# 4️⃣ ChromeDriver installation
 # ----------------------------------------------------------
 echo "[INFO] Starting ChromeDriver auto-installer..."
-CHROME_VERSION=${CHROME_VERSION:-120.0.6099.18}
-OS_ARCH=$(uname -m)
-DOWNLOAD_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip"
+python3 - <<'EOF'
+import os
+from chromedriver_binary_auto import install
+print("[INFO] Detected environment:", os.uname().sysname)
+install()
+print("[INFO] ✅ ChromeDriver installation complete!")
+EOF
 
-mkdir -p chromedriver
-wget -q -O /tmp/chromedriver.zip "$DOWNLOAD_URL"
-unzip -qo /tmp/chromedriver.zip -d chromedriver
-rm -f /tmp/chromedriver.zip
-chmod +x chromedriver/chromedriver
-
-echo "[INFO] ✅ ChromeDriver installation complete!"
-chromedriver/chromedriver --version || true
+if [[ ! -f "$CHROMEDRIVER_PATH" ]]; then
+  echo "[ERROR] ❌ ChromeDriver not found at $CHROMEDRIVER_PATH"
+  exit 1
+fi
 
 # ----------------------------------------------------------
-# 5️⃣ Verify Chrome binary
+# 5️⃣ Validate Chrome binary
 # ----------------------------------------------------------
-CHROME_BINARY=${CHROME_BINARY:-/opt/render/project/src/.local/chrome/chrome-linux/chrome}
-if [ -x "$CHROME_BINARY" ]; then
+if [[ -f "$CHROME_BINARY" ]]; then
   echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
 else
-  echo "[ERROR] ❌ Chrome binary missing or not executable at $CHROME_BINARY"
+  echo "[WARN] Chrome binary not found at $CHROME_BINARY"
 fi
 
 # ----------------------------------------------------------
@@ -81,31 +76,65 @@ python3 server.py &
 SERVER_PID=$!
 
 # ----------------------------------------------------------
-# 7️⃣ Wait for Uvicorn / FastAPI to come online
+# 7️⃣ Wait for Uvicorn port (10000) to open
 # ----------------------------------------------------------
-echo "[INFO] Waiting 10s for Uvicorn to initialize..."
-sleep 10
+echo "[INFO] Waiting for MCP server to report READY..."
+for i in {1..10}; do
+  if nc -z 127.0.0.1 "$PORT" 2>/dev/null; then
+    echo "[INFO] MCP reported READY (after ${i}s)."
+    break
+  fi
+  sleep 1
+done
 
 # ----------------------------------------------------------
-# 8️⃣ Final Health Summary
+# 8️⃣ Health check loop
 # ----------------------------------------------------------
-PORT=${PORT:-10000}
 HEALTH_URL="http://127.0.0.1:${PORT}/health"
-echo "----------------------------------------------------------"
-if curl -s --max-time 5 "$HEALTH_URL" | grep -q '"status": "healthy"'; then
-  ELAPSED=$(( $(date +%s) - START_TIME ))
-  echo "[✅ HEALTHY] MCP is running (phase: ready, uptime: ${ELAPSED}s)"
-  echo "[CHROME] $CHROME_BINARY"
-else
+MAX_RETRIES=5
+RETRY_DELAY=4
+SUCCESS=false
+
+for ((i=1; i<=MAX_RETRIES; i++)); do
+  echo "[INFO] Checking MCP health (attempt $i/$MAX_RETRIES)..."
+  STATUS=$(curl -s "$HEALTH_URL" | jq -r '.status // empty')
+  if [[ "$STATUS" == "healthy" ]]; then
+    echo "[✅ HEALTHY] MCP is running (phase: ready)"
+    SUCCESS=true
+    break
+  fi
+  echo "[WARN] MCP not ready yet, retrying in ${RETRY_DELAY}s..."
+  sleep "$RETRY_DELAY"
+done
+
+if [[ "$SUCCESS" == "false" ]]; then
   echo "[⚠️ WARN] MCP health check still failing after retries."
-  echo "[CHROME] $CHROME_BINARY"
-  echo "[INFO] Keeping process alive for Render supervisor..."
 fi
-echo "----------------------------------------------------------"
+
+# ----------------------------------------------------------
+# 9️⃣ Optional validation step
+# ----------------------------------------------------------
+if [[ "$RUN_VALIDATION" == "true" ]]; then
+  echo "----------------------------------------------------------"
+  echo "[INFO] Running post-deploy validation (validate_mcp.sh)..."
+  if [[ -f "./validate_mcp.sh" ]]; then
+    bash ./validate_mcp.sh || {
+      echo "[ERROR] ❌ Validation failed — exiting."
+      exit 1
+    }
+    echo "[✅] MCP validation complete."
+  else
+    echo "[WARN] Skipping validation — validate_mcp.sh not found."
+  fi
+  echo "----------------------------------------------------------"
+else
+  echo "[INFO] RUN_VALIDATION=false — skipping MCP validation."
+fi
+
+# ----------------------------------------------------------
+# 🔟 Keep container alive for Render supervisor
+# ----------------------------------------------------------
+echo "=========================================================="
 echo "[INFO] MCP Startup Completed."
 echo "=========================================================="
-
-# ----------------------------------------------------------
-# 9️⃣ Keep container alive (non-fatal exit)
-# ----------------------------------------------------------
 wait $SERVER_PID || true
