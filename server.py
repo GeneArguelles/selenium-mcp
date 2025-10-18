@@ -23,7 +23,19 @@ APP_START_TIME = time.time()
 app = FastAPI(title="Selenium MCP Server")
 
 # ==========================================================
-CORS Configuration
+# 2️⃣ Explicit OPTIONS handler (must come before middleware)
+# ==========================================================
+@app.options("/mcp/schema")
+def preflight_schema():
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    }
+    return Response(status_code=204, headers=headers)
+
+# ==========================================================
+# 3️⃣ CORS Middleware
 # ==========================================================
 app.add_middleware(
     CORSMiddleware,
@@ -35,18 +47,8 @@ app.add_middleware(
     max_age=86400,
 )
 
-# --- Explicit OPTIONS handler for /mcp/schema ---
-@app.options("/mcp/schema")
-def options_schema():
-    headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-    }
-    return Response(status_code=204, headers=headers)
-
 # ==========================================================
-# 3️⃣  Environment Variable Handling
+# 4️⃣ Environment Variable Handling
 # ==========================================================
 SERVER_NAME = os.getenv("SERVER_NAME", "Selenium")
 SERVER_DESC = os.getenv(
@@ -78,7 +80,7 @@ else:
     print(f"[INFO] ✅ Chrome binary confirmed: {CHROME_BINARY}")
 
 # ==========================================================
-# 4️⃣  Health Endpoint
+# 5️⃣ Health Endpoint
 # ==========================================================
 @app.get("/health")
 def health_check():
@@ -92,7 +94,7 @@ def health_check():
     }
 
 # ==========================================================
-# 5️⃣  MCP Schema and Invocation Models
+# 6️⃣ MCP Schema and Invocation Models
 # ==========================================================
 class SchemaResponse(BaseModel):
     version: str
@@ -106,7 +108,7 @@ class InvokeRequest(BaseModel):
     arguments: dict
 
 # ==========================================================
-# 6️⃣  /mcp/schema Endpoint  ← (RETURNS EXPLICIT JSONResponse)
+# 7️⃣ /mcp/schema Endpoint
 # ==========================================================
 @app.post("/mcp/schema")
 def get_schema():
@@ -142,7 +144,7 @@ def get_schema():
     return JSONResponse(content=schema, headers=headers)
 
 # ==========================================================
-# 7️⃣  /mcp/invoke Endpoint
+# 8️⃣ /mcp/invoke Endpoint
 # ==========================================================
 @app.post("/mcp/invoke")
 def invoke_tool(request: InvokeRequest):
@@ -170,7 +172,7 @@ def invoke_tool(request: InvokeRequest):
     raise HTTPException(status_code=404, detail=f"Unknown tool: {request.tool}")
 
 # ==========================================================
-# 8️⃣  Startup Event + Diagnostics
+# 9️⃣ Startup Event + Diagnostics
 # ==========================================================
 @app.on_event("startup")
 def on_startup():
