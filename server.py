@@ -95,12 +95,34 @@ def root_manifest(request=None):
     """
     Root manifest for OpenAI Agent Builder.
     GET: Returns discovery manifest with schema_url
-    POST: Returns full schema directly (for compatibility with Agent Builder handshake)
+    POST: Returns full schema (same as /mcp/schema) for handshake completion.
     """
-    print("[INFO] Served root manifest at /")
+    print(f"[INFO] Served root manifest via {request.method if request else 'GET'}")
 
-    # Root manifest (for GET)
-    manifest = {
+    # For GET: basic manifest (discovery only)
+    if request and request.method == "GET":
+        manifest = {
+            "version": "2025-10-01",
+            "type": "mcp_server",
+            "server_info": {
+                "type": "mcp_server",
+                "name": SERVER_NAME,
+                "description": SERVER_DESC,
+                "version": "1.0.0",
+                "runtime": platform.python_version(),
+                "capabilities": {
+                    "invocation": True,
+                    "streaming": False,
+                    "multi_tool": False,
+                },
+            },
+            "schema_url": "https://selenium-mcp.onrender.com/mcp/schema",
+            "tools": [],
+        }
+        return JSONResponse(content=manifest, media_type="application/json")
+
+    # For POST: respond with actual schema (same as /mcp/schema)
+    schema = {
         "version": "2025-10-01",
         "type": "mcp_server",
         "server_info": {
@@ -115,35 +137,20 @@ def root_manifest(request=None):
                 "multi_tool": False,
             },
         },
-        "schema_url": "https://selenium-mcp.onrender.com/mcp/schema",
-        "tools": [],
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
+                },
+            }
+        ],
     }
-
-    # When the Agent Builder sends POST /, respond with full schema instead
-    if request and request.method == "POST":
-        print("[INFO] Served POST / as /mcp/schema passthrough")
-        schema = {
-            "version": "2025-10-01",
-            "type": "mcp_server",
-            "server_info": manifest["server_info"],
-            "tools": [
-                {
-                    "name": "selenium_open_page",
-                    "description": "Open a URL in a headless Chrome browser and return the page title.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string"}
-                        },
-                        "required": ["url"],
-                    },
-                }
-            ],
-        }
-        return JSONResponse(content=schema, media_type="application/json")
-
-    # Otherwise, return the discovery manifest (GET)
-    return JSONResponse(content=manifest, media_type="application/json")
+    print("[INFO] Served POST / with full schema payload")
+    return JSONResponse(content=schema, media_type="application/json")
 
 
 # ==========================================================
