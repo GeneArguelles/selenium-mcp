@@ -71,17 +71,47 @@ else:
 # ==========================================================
 # Health and Diagnostics
 # ==========================================================
-
 @app.get("/health")
 def health_check():
     uptime = round(time.time() - APP_START_TIME, 2)
+    phase = "ready"
     chrome_ok = os.path.exists(CHROME_BINARY)
-    phase = "ready" if chrome_ok else "starting"
     return {
         "status": "healthy" if chrome_ok else "unhealthy",
         "phase": phase,
         "uptime_seconds": uptime,
         "chrome_path": CHROME_BINARY,
+    }
+
+# ==========================================================
+# Root Manifest (required for MCP discovery)
+# ==========================================================
+@app.get("/")
+def root_manifest():
+    """
+    Root manifest for OpenAI Agent Builder (MCP discovery).
+    """
+    print("[INFO] Served root manifest at /")
+    return {
+        "version": "2025-10-01",
+        "type": "mcp_server",
+        "server_info": {
+            "type": "mcp_server",
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False,
+            },
+        },
+        "endpoints": {
+            "schema": "/mcp/schema",
+            "invoke": "/mcp/invoke",
+            "health": "/health"
+        }
     }
 
 
