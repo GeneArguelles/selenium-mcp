@@ -177,21 +177,21 @@ def root_manifest():
 
 
 # ==========================================================
-# /live — Cache-bypass alias for MCP schema
+# /live — Full MCP schema mirror (cache-bypass)
 # ==========================================================
 from fastapi.responses import JSONResponse
 
-@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+@app.api_route("/live", methods=["GET", "POST", "OPTIONS", "HEAD"])
 def live_manifest():
     """
-    Cache-bypass alias endpoint for Agent Builder.
-    Always serves the exact MCP schema structure (no-store headers).
+    Cache-bypass alias for Agent Builder.
+    Must return identical schema structure to /mcp/schema.
     """
     print("[INFO] Served /live alias (cache-buster)")
 
     manifest = {
         "version": "2025-10-02",
-        "type": "mcp",
+        "type": "mcp",  # MUST be 'mcp'
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -209,14 +209,11 @@ def live_manifest():
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "url": {"type": "string"}
-                    },
-                    "required": ["url"]
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
                 },
             }
-        ],
-        "message": "Live endpoint reached — fresh schema served."
+        ]
     }
 
     response = JSONResponse(content=manifest)
