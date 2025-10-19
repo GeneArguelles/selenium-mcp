@@ -301,6 +301,23 @@ def invoke_options():
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
     }
     return JSONResponse(content={"status": "ok"}, headers=headers)
+
+
+# ==========================================================
+# /mcp/invoke (OPTIONS preflight handler)
+# ==========================================================
+@app.options("/mcp/invoke")
+def invoke_options():
+    """
+    Responds to CORS preflight or non-POST checks from clients like Agent Builder.
+    """
+    print("[INFO] Handled OPTIONS for /mcp/invoke (CORS preflight)")
+    return JSONResponse(
+        status_code=200,
+        content={"allow": ["POST", "OPTIONS"], "message": "Preflight OK"}
+    )
+
+
 # ==========================================================
 # OPTIONS Preflight Handler
 # ==========================================================
@@ -308,6 +325,7 @@ def invoke_options():
 def options_handler(full_path: str):
     print(f"[INFO] OPTIONS preflight for /{full_path}")
     return PlainTextResponse("OK", status_code=200)
+
 
 # ==========================================================
 # Startup Logs
