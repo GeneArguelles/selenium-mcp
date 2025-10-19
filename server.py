@@ -22,6 +22,45 @@ SERVER_DESC = "MCP server providing headless browser automation via Selenium."
 CHROME_BINARY = os.getenv("CHROME_BINARY", "/opt/render/project/src/.local/chrome/chrome-linux/chrome")
 CHROMEDRIVER_PATH = "./chromedriver/chromedriver"
 
+
+# ==========================================================
+# Chrome Binary Resolver (Render vs Local)
+# ==========================================================
+import platform
+import shutil
+import os
+
+def resolve_chrome_binary():
+    """
+    Returns a Chrome binary path that works for both Render and local machines.
+    """
+    # Render’s path
+    render_path = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
+    if os.path.exists(render_path):
+        return render_path
+
+    # macOS default installation paths
+    mac_paths = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ]
+    for path in mac_paths:
+        if os.path.exists(path):
+            return path
+
+    # Linux typical locations
+    for path in ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"]:
+        if shutil.which(path):
+            return path
+
+    print("[WARN] ⚠️ Chrome binary not found — relying on system default PATH")
+    return shutil.which("google-chrome") or shutil.which("chromium") or "chrome"
+    
+
+CHROME_BINARY = resolve_chrome_binary()
+print(f"[INFO] Chrome binary resolved as: {CHROME_BINARY}")
+
+
 # ==========================================================
 # FastAPI Init + CORS
 # ==========================================================
@@ -34,6 +73,53 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+# ==========================================================
+# Root Manifest (GET + POST)
+# ==========================================================
+from fastapi.responses import JSONResponse
+
+@app.api_route("/", methods=["GET", "POST"])
+def root_manifest():
+    """
+    Root manifest for OpenAI Agent Builder discovery.
+    Responds with the MCP-compliant manifest that lists server capabilities and tools.
+    """
+    print("[INFO] Served root manifest via GET/POST")
+
+    manifest = {
+        "version": "2025-10-01",
+        "type": "mcp_server",
+        "server_info": {
+            "type": "mcp_server",
+            "name": "Selenium",
+            "description": "MCP server providing headless browser automation via Selenium.",
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False,
+            },
+        },
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"]
+                }
+            }
+        ]
+    }
+
+    return JSONResponse(content=manifest)
+
 
 # ==========================================================
 # Models
@@ -175,3 +261,18 @@ def startup_banner():
     print(f"[INFO] ChromeDriver Path: {CHROMEDRIVER_PATH}")
     print("==========================================================")
     print("[INFO] Selenium MCP startup complete.")
+
+
+# ==========================================================
+# Local execution entry point (for local testing)
+# ==========================================================
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 10000))
+    print(f"[INFO] Launching Uvicorn directly on port {port}...")
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=port,
+        reload=True
+    )
