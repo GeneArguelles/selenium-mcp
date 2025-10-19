@@ -90,27 +90,27 @@ MAX_RETRIES=10
 RETRY_DELAY=4
 COUNT=0
 
-until curl -s --max-time 3 "$HEALTH_URL" | grep -q '"status": "healthy"'; do
-  COUNT=$((COUNT+1))
-  echo "[INFO] Waiting for MCP health (attempt $COUNT/$MAX_RETRIES)..."
-  sleep "$RETRY_DELAY"
-  if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
-    echo "[⚠️ WARN] MCP health check still failing after $MAX_RETRIES attempts."
-    break
-  fi
-done
++ until curl -s --max-time 3 "$HEALTH_URL" | jq -e '.status == "healthy"' >/dev/null 2>&1; do
++   COUNT=$((COUNT+1))
++   echo "[INFO] Waiting for MCP health (attempt $COUNT/$MAX_RETRIES)..."
++   sleep "$RETRY_DELAY"
++   if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
++     echo "[⚠️ WARN] MCP health check still failing after $MAX_RETRIES attempts."
++     break
++   fi
++ done
++
++ # ----------------------------------------------------------
++ # 6️⃣ Health Summary (jq-verified)
++ # ----------------------------------------------------------
++ if curl -s "$HEALTH_URL" | jq -e '.status == "healthy"' >/dev/null 2>&1; then
++   ELAPSED=$(( $(date +%s) - START_TIME ))
++   echo "[✅ HEALTHY] MCP is running (uptime: ${ELAPSED}s)"
++ else
++   echo "[⚠️ WARN] MCP did not confirm healthy status (check endpoint output)."
++   echo "[DEBUG] Response was: $(curl -s "$HEALTH_URL")"
++ fi
 
-# ----------------------------------------------------------
-# 6️⃣ Health Summary
-# ----------------------------------------------------------
-if curl -s "$HEALTH_URL" | grep -q '"status": "healthy"'; then
-  ELAPSED=$(( $(date +%s) - START_TIME ))
-  echo "[✅ HEALTHY] MCP is running (uptime: ${ELAPSED}s)"
-else
-  echo "[⚠️ WARN] MCP did not confirm healthy status."
-fi
-echo "[CHROME] $CHROME_BINARY"
-echo "=========================================================="
 
 # ----------------------------------------------------------
 # 7️⃣ Optional Validation Phase
