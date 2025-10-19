@@ -6,14 +6,24 @@ echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
 
 # ----------------------------------------------------------
-# 1️⃣ Load environment
+# 1️⃣ Load environment (safe for values with spaces)
 # ----------------------------------------------------------
 if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
+  echo "[INFO] Loading environment variables from .env safely..."
+  while IFS='=' read -r key value; do
+    # Skip comment lines or blank lines
+    [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
+    # Trim surrounding quotes if present
+    value="${value%\"}"
+    value="${value#\"}"
+    export "$key"="$value"
+  done < .env
+else
+  echo "[WARN] .env file not found — continuing with defaults."
 fi
 
 # ----------------------------------------------------------
-# 2️⃣ Rotate logs
+# 2️⃣ Rotate logs (keep last 3)
 # ----------------------------------------------------------
 mkdir -p logs
 ts=$(date +"%Y%m%d_%H%M%S")
@@ -23,7 +33,7 @@ find logs -maxdepth 1 -type d -name "deploy_*" | sort | head -n -3 | xargs -r rm
 echo "[INFO] Logs rotated. Active folder: $deploy_dir"
 
 # ----------------------------------------------------------
-# 3️⃣ Chrome binaries check
+# 3️⃣ Chrome binary + driver check
 # ----------------------------------------------------------
 CHROME_BINARY=${CHROME_BINARY:-/opt/render/project/src/.local/chrome/chrome-linux/chrome}
 CHROMEDRIVER_PATH=${CHROMEDRIVER_PATH:-./chromedriver/chromedriver}
@@ -39,7 +49,11 @@ install()
 EOF
 fi
 
-echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
+if [[ -f "$CHROME_BINARY" ]]; then
+  echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
+else
+  echo "[WARN] ⚠️ Chrome binary not found at $CHROME_BINARY"
+fi
 
 # ----------------------------------------------------------
 # 4️⃣ Launch MCP Server
@@ -49,7 +63,7 @@ python3 server.py &
 SERVER_PID=$!
 
 # ----------------------------------------------------------
-# 5️⃣ Wait for Uvicorn health
+# 5️⃣ Wait for Uvicorn /health to report healthy
 # ----------------------------------------------------------
 PORT=${PORT:-10000}
 HEALTH_URL="http://127.0.0.1:${PORT}/health"
@@ -77,7 +91,18 @@ echo "[CHROME] $CHROME_BINARY"
 echo "=========================================================="
 
 # ----------------------------------------------------------
-# 7️⃣ Keep alive
+# 7️⃣ Optional validation (if enabled)
+# ----------------------------------------------------------
+if [ "${RUN_VALIDATION:-false}" = "true" ]; then
+  echo "[INFO] RUN_VALIDATION=true — running validate_mcp.sh..."
+  chmod +x validate_mcp.sh || true
+  ./validate_mcp.sh || echo "[WARN] Validation script failed (non-fatal)."
+else
+  echo "[INFO] RUN_VALIDATION=false — skipping MCP validation."
+fi
+
+# ----------------------------------------------------------
+# 8️⃣ Keep container alive (Render supervisor)
 # ----------------------------------------------------------
 if ps -p "$SERVER_PID" >/dev/null 2>&1; then
   wait "$SERVER_PID"
