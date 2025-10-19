@@ -177,19 +177,18 @@ def root_manifest():
 
 
 # ==========================================================
-# /live — Cache-bypass alias for root manifest
+# /live — Cache-buster alias (forces manifest refresh)
 # ==========================================================
-from fastapi.responses import JSONResponse
-
-@app.api_route("/live", methods=["GET", "HEAD", "OPTIONS"])
+@app.get("/live")
 def live_manifest():
     """
-    Cache-bypass alias endpoint.
-    Always serves a fresh MCP manifest with no-store headers.
+    Alternate endpoint used to force Agent Builder or clients
+    to bypass cache and re-fetch the manifest.
+    Includes explicit message field for diagnostics.
     """
-    print("[INFO] Served /live manifest (cache-bypass)")
+    print("[INFO] Served /live alias (cache-buster)")
 
-    manifest = {
+    live_manifest_data = {
         "version": "2025-10-01",
         "type": "mcp_server",
         "server_info": {
@@ -204,6 +203,8 @@ def live_manifest():
                 "multi_tool": False,
             },
         },
+        "schema_url": "/mcp/schema",
+        "message": "Live endpoint reached — manifest refresh triggered.",
         "tools": [
             {
                 "name": "selenium_open_page",
@@ -217,14 +218,10 @@ def live_manifest():
         ],
     }
 
-    response = JSONResponse(content=manifest)
+    response = JSONResponse(content=live_manifest_data)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-    response.headers["Access-Control-Allow-Origin"] = "https://agentbuilder.openai.com"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, HEAD"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 
