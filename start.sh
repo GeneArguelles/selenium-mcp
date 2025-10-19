@@ -1,137 +1,117 @@
 #!/usr/bin/env bash
-# ==========================================================
-# start.sh — Selenium MCP Server Startup Script (Render-Ready)
-# Version: v2025.10.19a (jq-based health fix)
-# ==========================================================
-# Features:
-#   • Safe .env loader
-#   • Log rotation (keep last 3)
-#   • Chrome + ChromeDriver validation
-#   • Uvicorn explicit launch
-#   • JSON-based health check using jq
-#   • Optional validation stage
-#   • Keep-alive tail for Render supervisor
-# ==========================================================
+set -e
 
-set -e  # Exit on first unhandled error
-START_TIME=$(date +%s)
+# ==========================================================
+# 🧩 Selenium MCP — Render Startup Script
+# Version: 2025.10.20a
+# ==========================================================
 
 echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
 
 # ----------------------------------------------------------
-# 1️⃣ Safe .env Loader (quoted and space-safe)
+# 1️⃣ Load environment variables
 # ----------------------------------------------------------
 if [ -f .env ]; then
   echo "[INFO] Loading environment variables from .env safely..."
-  while IFS='=' read -r key value; do
-    [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-    value="${value%\"}"
-    value="${value#\"}"
-    export "$key"="$value"
-  done < .env
+  set -o allexport
+  source .env
+  set +o allexport
 else
-  echo "[WARN] .env not found — proceeding with defaults."
+  echo "[WARN] No .env file found — proceeding with defaults."
 fi
 
 # ----------------------------------------------------------
-# 2️⃣ Log Rotation (keep last 3)
+# 2️⃣ Log rotation (keep last 3 deploy logs)
 # ----------------------------------------------------------
 mkdir -p logs
 ts=$(date +"%Y%m%d_%H%M%S")
-deploy_dir="logs/deploy_${ts}"
-mkdir -p "$deploy_dir"
-find logs -maxdepth 1 -type d -name "deploy_*" | sort | head -n -3 | xargs -r rm -rf
-echo "[INFO] Logs rotated. Active folder: $deploy_dir"
+find logs -type f -name "deploy_*" | sort | head -n -3 | xargs -r rm -f
+log_dir="logs/deploy_${ts}"
+mkdir -p "$log_dir"
+echo "[INFO] Logs rotated. Active folder: ${log_dir}"
 
 # ----------------------------------------------------------
-# 3️⃣ Chrome Binary & Driver Verification
+# 3️⃣ ChromeDriver + Chrome binary checks
 # ----------------------------------------------------------
-CHROME_BINARY=${CHROME_BINARY:-/opt/render/project/src/.local/chrome/chrome-linux/chrome}
-CHROMEDRIVER_PATH=${CHROMEDRIVER_PATH:-./chromedriver/chromedriver}
+CHROME_BINARY=${CHROME_BINARY:-"/opt/render/project/src/.local/chrome/chrome-linux/chrome"}
+CHROMEDRIVER_PATH=${CHROMEDRIVER_PATH:-"./chromedriver/chromedriver"}
 
 if [[ -f "$CHROMEDRIVER_PATH" ]]; then
   echo "[INFO] ✅ ChromeDriver binary present at $CHROMEDRIVER_PATH"
 else
-  echo "[INFO] Installing ChromeDriver via chromedriver-binary-auto..."
-  pip install chromedriver-binary-auto || true
-  python3 - <<'EOF'
-try:
-    from chromedriver_binary_auto import install
-    install()
-    print("[INFO] ✅ ChromeDriver installation complete.")
-except Exception as e:
-    print(f"[WARN] ChromeDriver install failed: {e}")
-EOF
+  echo "[ERROR] ❌ ChromeDriver not found at $CHROMEDRIVER_PATH"
+  exit 1
 fi
 
 if [[ -f "$CHROME_BINARY" ]]; then
   echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
 else
-  echo "[WARN] ⚠️ Chrome binary missing at $CHROME_BINARY — check path!"
+  echo "[ERROR] ❌ Chrome binary not found: $CHROME_BINARY"
+  exit 1
 fi
 
 # ----------------------------------------------------------
-# 4️⃣ Launch MCP Server via Uvicorn
+# 4️⃣ Launch Uvicorn MCP Server
 # ----------------------------------------------------------
-PORT=${PORT:-10000}
-echo "[INFO] Launching MCP Server via Uvicorn on port $PORT..."
-uvicorn server:app --host 0.0.0.0 --port "$PORT" --log-level info &
-SERVER_PID=$!
-
+echo "[INFO] Launching MCP Server via Uvicorn on port 10000..."
+nohup python3 -m uvicorn server:app --host 0.0.0.0 --port 10000 > "${log_dir}/uvicorn.log" 2>&1 &
+UVICORN_PID=$!
 
 # ----------------------------------------------------------
-# 5️⃣ Wait for MCP Health Endpoint (jq-based parser)
+# 5️⃣ Health polling — wait until /health responds 200
 # ----------------------------------------------------------
-HEALTH_URL="http://127.0.0.1:${PORT}/health"
-MAX_RETRIES=10
-RETRY_DELAY=4
-COUNT=0
-
-# Use explicit semicolons for compatibility with Render's non-interactive shell
-until curl -s --max-time 3 "$HEALTH_URL" | jq -e '.status == "healthy"' >/dev/null 2>&1; do
-  COUNT=$((COUNT + 1))
-  echo "[INFO] Waiting for MCP health (attempt $COUNT/$MAX_RETRIES)..."
-  sleep "$RETRY_DELAY"
-  if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
-    echo "[⚠️ WARN] MCP health check still failing after $MAX_RETRIES attempts."
+echo "[INFO] Waiting for MCP health..."
+for i in {1..10}; do
+  status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:10000/health || true)
+  if [ "$status" = "200" ]; then
+    echo "[✅ HEALTHY] MCP is running (uptime: ${i}s)"
     break
+  else
+    echo "[INFO] Waiting for MCP health (attempt ${i}/10)..."
+    sleep 2
   fi
 done
 
-
-# ----------------------------------------------------------
-# 6️⃣ Health Summary (jq-verified)
-# ----------------------------------------------------------
-if curl -s "$HEALTH_URL" | jq -e '.status == "healthy"' >/dev/null 2>&1; then
-  ELAPSED=$(( $(date +%s) - START_TIME ))
-  echo "[✅ HEALTHY] MCP is running (uptime: ${ELAPSED}s)"
+if [ "$status" != "200" ]; then
+  echo "[⚠️ WARN] MCP health check still failing after 10 attempts."
 else
-  echo "[⚠️ WARN] MCP did not confirm healthy status."
-  echo "[DEBUG] Health response: $(curl -s "$HEALTH_URL")"
+  echo "[CHROME] $CHROME_BINARY"
 fi
-echo "[CHROME] $CHROME_BINARY"
-echo "=========================================================="
 
 # ----------------------------------------------------------
-# 7️⃣ Optional Validation Phase
+# 6️⃣ Optional validation suite
 # ----------------------------------------------------------
-if [ "${RUN_VALIDATION:-false}" = "true" ]; then
-  echo "[INFO] RUN_VALIDATION=true — running validate_mcp.sh..."
-  chmod +x validate_mcp.sh || true
-  ./validate_mcp.sh || echo "[WARN] Validation failed (non-fatal)."
+if [ "$RUN_VALIDATION" = "true" ]; then
+  echo "[INFO] Running MCP validation suite (validate_mcp.sh)..."
+  if [ -f "./validate_mcp.sh" ]; then
+    chmod +x ./validate_mcp.sh
+    ./validate_mcp.sh || echo "[WARN] Validation script detected issues — continuing."
+  else
+    echo "[WARN] validate_mcp.sh not found; skipping."
+  fi
 else
   echo "[INFO] RUN_VALIDATION=false — skipping MCP validation."
 fi
 
 # ----------------------------------------------------------
-# 8️⃣ Keep Process Alive for Render Supervisor
+# 7️⃣ ✅ Run diagnostics suite (NEW)
 # ----------------------------------------------------------
-if ps -p "$SERVER_PID" >/dev/null 2>&1; then
-  echo "[INFO] MCP process active — following logs."
-  wait "$SERVER_PID"
+if [ "$RUN_DIAGNOSTICS" = "true" ]; then
+  echo "[INFO] Running MCP diagnostics suite (diagnose_mcp_runtime.sh)..."
+  if [ -f "./diagnose_mcp_runtime.sh" ]; then
+    chmod +x ./diagnose_mcp_runtime.sh
+    ./diagnose_mcp_runtime.sh || echo "[WARN] Diagnostics reported issues — see logs above."
+  else
+    echo "[WARN] diagnose_mcp_runtime.sh not found; skipping diagnostics."
+  fi
 else
-  echo "[INFO] MCP process not detected — keeping container alive."
-  tail -f /dev/null
+  echo "[INFO] RUN_DIAGNOSTICS=false — skipping diagnostics."
 fi
+
+# ----------------------------------------------------------
+# 8️⃣ Keep MCP process alive (Render supervisor)
+# ----------------------------------------------------------
+echo "[INFO] MCP process active — following logs."
+tail -f "${log_dir}/uvicorn.log"
