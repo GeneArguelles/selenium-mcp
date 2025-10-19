@@ -1,14 +1,15 @@
+#!/usr/bin/env python3
 # ==========================================================
-# Selenium MCP Server — Render-Ready (v2025.10.18a)
-# Python 3.11 / FastAPI 0.119 / Headless Chrome
+# Selenium MCP Server (Render-ready, full diagnostics)
+# Version: 2025.10.19d — Stable Production Baseline
 # ==========================================================
 
 import os
 import time
 import platform
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -16,50 +17,12 @@ from selenium.webdriver.chrome.options import Options
 # ==========================================================
 # Globals
 # ==========================================================
-APP_START_TIME = time.time()
 SERVER_NAME = "Selenium"
 SERVER_DESC = "MCP server providing headless browser automation via Selenium."
-CHROME_BINARY = os.getenv("CHROME_BINARY", "/opt/render/project/src/.local/chrome/chrome-linux/chrome")
+APP_START_TIME = time.time()
+
 CHROMEDRIVER_PATH = "./chromedriver/chromedriver"
-
-
-# ==========================================================
-# Chrome Binary Resolver (Render vs Local)
-# ==========================================================
-import platform
-import shutil
-import os
-
-def resolve_chrome_binary():
-    """
-    Returns a Chrome binary path that works for both Render and local machines.
-    """
-    # Render’s path
-    render_path = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
-    if os.path.exists(render_path):
-        return render_path
-
-    # macOS default installation paths
-    mac_paths = [
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    ]
-    for path in mac_paths:
-        if os.path.exists(path):
-            return path
-
-    # Linux typical locations
-    for path in ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"]:
-        if shutil.which(path):
-            return path
-
-    print("[WARN] ⚠️ Chrome binary not found — relying on system default PATH")
-    return shutil.which("google-chrome") or shutil.which("chromium") or "chrome"
-    
-
-CHROME_BINARY = resolve_chrome_binary()
-print(f"[INFO] Chrome binary resolved as: {CHROME_BINARY}")
-
+CHROME_BINARY = os.getenv("CHROME_BINARY", "/opt/render/project/src/.local/chrome/chrome-linux/chrome")
 
 # ==========================================================
 # FastAPI Init + CORS
@@ -68,46 +31,18 @@ app = FastAPI(title=f"{SERVER_NAME} MCP Server")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For production: ["https://agentbuilder.openai.com"]
+    allow_origins=["*"],  # For production, tighten if necessary
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
     allow_headers=["*"],
 )
 
-
 # ==========================================================
-# Models
+# MCP Manifest Builder
 # ==========================================================
-class SchemaResponse(BaseModel):
-    version: str
-    type: str
-    server_info: dict
-    capabilities: dict
-    tools: list | None = None
-
-class InvokeRequest(BaseModel):
-    tool: str
-    arguments: dict
-
-# ==========================================================
-# Health Check
-# ==========================================================
-@app.get("/health")
-def health_check():
-    uptime = round(time.time() - APP_START_TIME, 2)
-    chrome_ok = os.path.exists(CHROME_BINARY)
-    return {
-        "status": "healthy" if chrome_ok else "unhealthy",
-        "phase": "ready" if chrome_ok else "init",
-        "uptime_seconds": uptime,
-        "chrome_path": CHROME_BINARY,
-    }
-
-# ==========================================================
-# MCP Manifest Template
-# ==========================================================
-def base_manifest():
-    return {
+def build_mcp_manifest():
+    """Return a fully MCP-compliant manifest shared by all endpoints."""
+    manifest = {
         "version": "2025-10-02",
         "type": "mcp",
         "server_info": {
@@ -121,37 +56,6 @@ def base_manifest():
             "streaming": False,
             "multi_tool": False,
         },
-    }
-
-
-# ==========================================================
-# Root Manifest (GET + POST + HEAD + OPTIONS)
-# ==========================================================
-from fastapi.responses import JSONResponse
-
-@app.api_route("/", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def root_manifest():
-    """
-    Root manifest for OpenAI Agent Builder discovery.
-    Returns a fully compliant MCP manifest with capabilities and tool definitions.
-    """
-    print("[INFO] Served root manifest via GET/POST/HEAD/OPTIONS")
-
-    manifest = {
-        "version": "2025-10-01",
-        "type": "mcp_server",
-        "server_info": {
-            "type": "mcp_server",
-            "name": SERVER_NAME,
-            "description": SERVER_DESC,
-            "version": "1.0.0",
-            "runtime": platform.python_version(),
-            "capabilities": {
-                "invocation": True,
-                "streaming": False,
-                "multi_tool": False,
-            },
-        },
         "tools": [
             {
                 "name": "selenium_open_page",
@@ -164,100 +68,94 @@ def root_manifest():
             }
         ],
     }
+    return manifest
+
+# ==========================================================
+# Root Manifest (GET + POST + HEAD + OPTIONS)
+# ==========================================================
+@app.api_route("/", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def root_manifest():
+    """Primary root manifest for MCP discovery (Agent Builder handshake)."""
+    print("[INFO] Served root manifest via GET/POST/HEAD/OPTIONS")
+    manifest = build_mcp_manifest()
 
     response = JSONResponse(content=manifest)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-    response.headers["Access-Control-Allow-Origin"] = "https://agentbuilder.openai.com"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, HEAD"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Content-Type"] = "application/json"
     return response
 
+# ==========================================================
+# /health — Diagnostic and uptime probe
+# ==========================================================
+@app.get("/health")
+def health_check():
+    uptime = round(time.time() - APP_START_TIME, 2)
+    chrome_ok = os.path.exists(CHROME_BINARY)
+    status = "healthy" if chrome_ok else "unhealthy"
+    phase = "ready" if chrome_ok else "init"
+
+    print(f"[INFO] /health → {status}, uptime {uptime}s, chrome_ok={chrome_ok}")
+
+    return {
+        "status": status,
+        "phase": phase,
+        "uptime_seconds": uptime,
+        "chrome_path": CHROME_BINARY,
+    }
 
 # ==========================================================
-# /live — Full MCP schema mirror (cache-bypass)
+# /mcp/schema — Canonical MCP schema
 # ==========================================================
-from fastapi.responses import JSONResponse
+@app.api_route("/mcp/schema", methods=["GET", "POST", "OPTIONS"])
+def mcp_schema():
+    """Canonical MCP schema (used by Agent Builder for tool registration)."""
+    manifest = build_mcp_manifest()
+    print("[INFO] Served /mcp/schema manifest (canonical)")
 
-@app.api_route("/live", methods=["GET", "POST", "OPTIONS", "HEAD"])
-def live_manifest():
+    response = JSONResponse(content=manifest)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["Content-Type"] = "application/json"
+    return response
+
+# ==========================================================
+# /live — Cache-bypass alias for /mcp/schema
+# ==========================================================
+@app.api_route("/live", methods=["GET", "POST", "OPTIONS"])
+def mcp_live():
     """
-    Cache-bypass alias for Agent Builder.
-    Must return identical schema structure to /mcp/schema.
+    Cache-bypass endpoint for forcing Agent Builder revalidation.
+    Supports GET/POST/OPTIONS and returns a fresh manifest each time.
     """
     print("[INFO] Served /live alias (cache-buster)")
 
-    manifest = {
-        "version": "2025-10-02",
-        "type": "mcp",  # MUST be 'mcp'
-        "server_info": {
-            "name": SERVER_NAME,
-            "description": SERVER_DESC,
-            "version": "1.0.0",
-            "runtime": platform.python_version(),
-        },
-        "capabilities": {
-            "invocation": True,
-            "streaming": False,
-            "multi_tool": False,
-        },
-        "tools": [
-            {
-                "name": "selenium_open_page",
-                "description": "Open a URL in a headless Chrome browser and return the page title.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
-                },
-            }
-        ]
-    }
+    manifest = build_mcp_manifest()
+    manifest["message"] = "Live manifest refresh triggered."
+    manifest["schema_url"] = "/mcp/schema"
 
     response = JSONResponse(content=manifest)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["Content-Type"] = "application/json"
     return response
 
-
 # ==========================================================
-# /mcp/schema — Tool Schema
+# Pydantic model for /mcp/invoke requests
 # ==========================================================
-@app.api_route("/mcp/schema", methods=["GET", "POST", "OPTIONS"])
-def get_schema():
-    print("[INFO] Served /mcp/schema")
-    schema = base_manifest()
-    schema["tools"] = [
-        {
-            "name": "selenium_open_page",
-            "description": "Open a URL in a headless Chrome browser and return the page title.",
-            "parameters": {
-                "type": "object",
-                "properties": {"url": {"type": "string"}},
-                "required": ["url"],
-            },
-        }
-    ]
-    return JSONResponse(content=schema)
-
+class InvokeRequest(BaseModel):
+    tool: str
+    arguments: dict
 
 # ==========================================================
 # /mcp/invoke — Executes a Selenium automation command
 # ==========================================================
-@app.api_route("/mcp/invoke", methods=["POST", "OPTIONS", "GET"])
-def invoke_tool(req: InvokeRequest | None = None):
-    print(f"[INFO] Invoked tool endpoint via {req and req.tool or 'preflight/GET'}")
-
-    # Handle CORS preflight or health-style GET gracefully
-    if not req or not isinstance(req, InvokeRequest):
-        return {
-            "status": "ok",
-            "message": "Invoke endpoint ready",
-            "methods_allowed": ["POST", "OPTIONS", "GET"]
-        }
+@app.post("/mcp/invoke")
+def invoke_tool(req: InvokeRequest):
+    print(f"[INFO] Invoked tool: {req.tool}")
 
     if req.tool == "selenium_open_page":
         url = req.arguments.get("url")
@@ -277,56 +175,23 @@ def invoke_tool(req: InvokeRequest | None = None):
             driver.quit()
             return {"result": f"Opened {url}", "title": title}
         except Exception as e:
+            print(f"[ERROR] Selenium invoke error: {e}")
             return JSONResponse(status_code=500, content={"error": str(e)})
 
     return JSONResponse(status_code=400, content={"error": f"Unknown tool: {req.tool}"})
 
-
-# ----------------------------------------------------------
-# Allow preflight / CORS requests for /mcp/invoke
-# ----------------------------------------------------------
-from fastapi.responses import JSONResponse
-
-@app.options("/mcp/invoke")
-def invoke_options():
-    """Permit CORS preflight and non-POST checks."""
-    headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    }
-    return JSONResponse(content={"status": "ok"}, headers=headers)
-
-
 # ==========================================================
-# /mcp/invoke (OPTIONS preflight handler)
-# ==========================================================
-@app.options("/mcp/invoke")
-def invoke_options():
-    """
-    Responds to CORS preflight or non-POST checks from clients like Agent Builder.
-    """
-    print("[INFO] Handled OPTIONS for /mcp/invoke (CORS preflight)")
-    return JSONResponse(
-        status_code=200,
-        content={"allow": ["POST", "OPTIONS"], "message": "Preflight OK"}
-    )
-
-
-# ==========================================================
-# OPTIONS Preflight Handler
+# Allow OPTIONS preflights globally
 # ==========================================================
 @app.options("/{full_path:path}")
 def options_handler(full_path: str):
-    print(f"[INFO] OPTIONS preflight for /{full_path}")
-    return PlainTextResponse("OK", status_code=200)
-
+    return JSONResponse(status_code=204, content=None)
 
 # ==========================================================
-# Startup Logs
+# Startup Event (for Render logs)
 # ==========================================================
 @app.on_event("startup")
-def startup_banner():
+def startup_log():
     print("==========================================================")
     print(f"[INFO] Starting {SERVER_NAME} MCP Server...")
     print(f"[INFO] Description: {SERVER_DESC}")
@@ -335,19 +200,12 @@ def startup_banner():
     print(f"[INFO] Chrome Binary: {CHROME_BINARY}")
     print(f"[INFO] ChromeDriver Path: {CHROMEDRIVER_PATH}")
     print("==========================================================")
-    print("[INFO] Selenium MCP startup complete.")
-
+    print(f"[INFO] Selenium MCP startup complete.")
 
 # ==========================================================
-# Local execution entry point (for local testing)
+# Local execution entry point (for testing)
 # ==========================================================
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 10000))
-    print(f"[INFO] Launching Uvicorn directly on port {port}...")
-    uvicorn.run(
-        "server:app",
-        host="0.0.0.0",
-        port=port,
-        reload=True
-    )
+    print("[INFO] Launching Uvicorn directly on port 10000...")
+    uvicorn.run("server:app", host="0.0.0.0", port=10000, reload=True)
