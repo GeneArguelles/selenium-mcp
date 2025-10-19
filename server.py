@@ -166,11 +166,19 @@ def get_schema():
 
 
 # ==========================================================
-# /mcp/invoke — Execute tool
+# /mcp/invoke — Executes a Selenium automation command
 # ==========================================================
-@app.post("/mcp/invoke")
-def invoke_tool(req: InvokeRequest):
-    print(f"[INFO] Invoked tool: {req.tool}")
+@app.api_route("/mcp/invoke", methods=["POST", "OPTIONS", "GET"])
+def invoke_tool(req: InvokeRequest | None = None):
+    print(f"[INFO] Invoked tool endpoint via {req and req.tool or 'preflight/GET'}")
+
+    # Handle CORS preflight or health-style GET gracefully
+    if not req or not isinstance(req, InvokeRequest):
+        return {
+            "status": "ok",
+            "message": "Invoke endpoint ready",
+            "methods_allowed": ["POST", "OPTIONS", "GET"]
+        }
 
     if req.tool == "selenium_open_page":
         url = req.arguments.get("url")
