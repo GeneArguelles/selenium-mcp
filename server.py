@@ -177,14 +177,16 @@ def root_manifest():
 
 
 # ==========================================================
-# /live — Cache-buster alias (forces manifest refresh)
+# /live — Cache-buster alias (GET + POST)
 # ==========================================================
-@app.get("/live")
+from fastapi.responses import JSONResponse
+
+@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def live_manifest():
     """
-    Alternate endpoint used to force Agent Builder or clients
+    Alternate endpoint used to force OpenAI Agent Builder or other clients
     to bypass cache and re-fetch the manifest.
-    Includes explicit message field for diagnostics.
+    Supports POST handshake required by Agent Builder.
     """
     print("[INFO] Served /live alias (cache-buster)")
 
