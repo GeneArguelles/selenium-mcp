@@ -76,52 +76,6 @@ app.add_middleware(
 
 
 # ==========================================================
-# Root Manifest (GET + POST)
-# ==========================================================
-from fastapi.responses import JSONResponse
-
-@app.api_route("/", methods=["GET", "POST"])
-def root_manifest():
-    """
-    Root manifest for OpenAI Agent Builder discovery.
-    Responds with the MCP-compliant manifest that lists server capabilities and tools.
-    """
-    print("[INFO] Served root manifest via GET/POST")
-
-    manifest = {
-        "version": "2025-10-01",
-        "type": "mcp_server",
-        "server_info": {
-            "type": "mcp_server",
-            "name": "Selenium",
-            "description": "MCP server providing headless browser automation via Selenium.",
-            "version": "1.0.0",
-            "runtime": platform.python_version(),
-            "capabilities": {
-                "invocation": True,
-                "streaming": False,
-                "multi_tool": False,
-            },
-        },
-        "tools": [
-            {
-                "name": "selenium_open_page",
-                "description": "Open a URL in a headless Chrome browser and return the page title.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {"type": "string"}
-                    },
-                    "required": ["url"]
-                }
-            }
-        ]
-    }
-
-    return JSONResponse(content=manifest)
-
-
-# ==========================================================
 # Models
 # ==========================================================
 class SchemaResponse(BaseModel):
