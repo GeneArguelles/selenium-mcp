@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # ==========================================================
 # start.sh — Selenium MCP Server Startup Script (Render-Ready)
+# Version: v2025.10.19a (jq-based health fix)
 # ==========================================================
-# Includes:
-#   • Safe .env loader (handles spaces and quotes)
-#   • Log rotation (retain last 3 deploy folders)
-#   • Chrome + ChromeDriver validation and fallback installer
-#   • Explicit Uvicorn launch for Render port detection
-#   • Health-check polling with retries
-#   • Optional post-startup validation via validate_mcp.sh
-#   • Final “keep-alive” for Render supervisor
+# Features:
+#   • Safe .env loader
+#   • Log rotation (keep last 3)
+#   • Chrome + ChromeDriver validation
+#   • Uvicorn explicit launch
+#   • JSON-based health check using jq
+#   • Optional validation stage
+#   • Keep-alive tail for Render supervisor
 # ==========================================================
 
 set -e  # Exit on first unhandled error
@@ -25,9 +26,7 @@ echo "=========================================================="
 if [ -f .env ]; then
   echo "[INFO] Loading environment variables from .env safely..."
   while IFS='=' read -r key value; do
-    # Ignore comments or blank lines
     [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-    # Remove surrounding quotes if present
     value="${value%\"}"
     value="${value#\"}"
     export "$key"="$value"
@@ -43,7 +42,6 @@ mkdir -p logs
 ts=$(date +"%Y%m%d_%H%M%S")
 deploy_dir="logs/deploy_${ts}"
 mkdir -p "$deploy_dir"
-# Delete all but last 3 deployments
 find logs -maxdepth 1 -type d -name "deploy_*" | sort | head -n -3 | xargs -r rm -rf
 echo "[INFO] Logs rotated. Active folder: $deploy_dir"
 
@@ -82,35 +80,39 @@ echo "[INFO] Launching MCP Server via Uvicorn on port $PORT..."
 uvicorn server:app --host 0.0.0.0 --port "$PORT" --log-level info &
 SERVER_PID=$!
 
+
 # ----------------------------------------------------------
-# 5️⃣ Wait for MCP Health Endpoint
+# 5️⃣ Wait for MCP Health Endpoint (jq-based parser)
 # ----------------------------------------------------------
 HEALTH_URL="http://127.0.0.1:${PORT}/health"
 MAX_RETRIES=10
 RETRY_DELAY=4
 COUNT=0
 
-+ until curl -s --max-time 3 "$HEALTH_URL" | jq -e '.status == "healthy"' >/dev/null 2>&1; do
-+   COUNT=$((COUNT+1))
-+   echo "[INFO] Waiting for MCP health (attempt $COUNT/$MAX_RETRIES)..."
-+   sleep "$RETRY_DELAY"
-+   if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
-+     echo "[⚠️ WARN] MCP health check still failing after $MAX_RETRIES attempts."
-+     break
-+   fi
-+ done
-+
-+ # ----------------------------------------------------------
-+ # 6️⃣ Health Summary (jq-verified)
-+ # ----------------------------------------------------------
-+ if curl -s "$HEALTH_URL" | jq -e '.status == "healthy"' >/dev/null 2>&1; then
-+   ELAPSED=$(( $(date +%s) - START_TIME ))
-+   echo "[✅ HEALTHY] MCP is running (uptime: ${ELAPSED}s)"
-+ else
-+   echo "[⚠️ WARN] MCP did not confirm healthy status (check endpoint output)."
-+   echo "[DEBUG] Response was: $(curl -s "$HEALTH_URL")"
-+ fi
+# Use explicit semicolons for compatibility with Render's non-interactive shell
+until curl -s --max-time 3 "$HEALTH_URL" | jq -e '.status == "healthy"' >/dev/null 2>&1; do
+  COUNT=$((COUNT + 1))
+  echo "[INFO] Waiting for MCP health (attempt $COUNT/$MAX_RETRIES)..."
+  sleep "$RETRY_DELAY"
+  if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
+    echo "[⚠️ WARN] MCP health check still failing after $MAX_RETRIES attempts."
+    break
+  fi
+done
 
+
+# ----------------------------------------------------------
+# 6️⃣ Health Summary (jq-verified)
+# ----------------------------------------------------------
+if curl -s "$HEALTH_URL" | jq -e '.status == "healthy"' >/dev/null 2>&1; then
+  ELAPSED=$(( $(date +%s) - START_TIME ))
+  echo "[✅ HEALTHY] MCP is running (uptime: ${ELAPSED}s)"
+else
+  echo "[⚠️ WARN] MCP did not confirm healthy status."
+  echo "[DEBUG] Health response: $(curl -s "$HEALTH_URL")"
+fi
+echo "[CHROME] $CHROME_BINARY"
+echo "=========================================================="
 
 # ----------------------------------------------------------
 # 7️⃣ Optional Validation Phase
