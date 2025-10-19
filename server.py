@@ -164,6 +164,7 @@ def get_schema():
     ]
     return JSONResponse(content=schema)
 
+
 # ==========================================================
 # /mcp/invoke — Execute tool
 # ==========================================================
@@ -193,6 +194,21 @@ def invoke_tool(req: InvokeRequest):
 
     return JSONResponse(status_code=400, content={"error": f"Unknown tool: {req.tool}"})
 
+
+# ----------------------------------------------------------
+# Allow preflight / CORS requests for /mcp/invoke
+# ----------------------------------------------------------
+from fastapi.responses import JSONResponse
+
+@app.options("/mcp/invoke")
+def invoke_options():
+    """Permit CORS preflight and non-POST checks."""
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    }
+    return JSONResponse(content={"status": "ok"}, headers=headers)
 # ==========================================================
 # OPTIONS Preflight Handler
 # ==========================================================
