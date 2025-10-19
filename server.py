@@ -177,50 +177,49 @@ def root_manifest():
 
 
 # ==========================================================
-# /live — Cache-buster alias (GET + POST)
+# /live — Cache-bypass alias for MCP schema
 # ==========================================================
 from fastapi.responses import JSONResponse
 
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def live_manifest():
     """
-    Alternate endpoint used to force OpenAI Agent Builder or other clients
-    to bypass cache and re-fetch the manifest.
-    Supports POST handshake required by Agent Builder.
+    Cache-bypass alias endpoint for Agent Builder.
+    Always serves the exact MCP schema structure (no-store headers).
     """
     print("[INFO] Served /live alias (cache-buster)")
 
-    live_manifest_data = {
-        "version": "2025-10-01",
-        "type": "mcp_server",
+    manifest = {
+        "version": "2025-10-02",
+        "type": "mcp",
         "server_info": {
-            "type": "mcp_server",
             "name": SERVER_NAME,
             "description": SERVER_DESC,
             "version": "1.0.0",
             "runtime": platform.python_version(),
-            "capabilities": {
-                "invocation": True,
-                "streaming": False,
-                "multi_tool": False,
-            },
         },
-        "schema_url": "/mcp/schema",
-        "message": "Live endpoint reached — manifest refresh triggered.",
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False,
+        },
         "tools": [
             {
                 "name": "selenium_open_page",
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"]
                 },
             }
         ],
+        "message": "Live endpoint reached — fresh schema served."
     }
 
-    response = JSONResponse(content=live_manifest_data)
+    response = JSONResponse(content=manifest)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
