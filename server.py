@@ -123,15 +123,57 @@ def base_manifest():
         },
     }
 
+
 # ==========================================================
-# Root Manifest (GET + POST)
+# Root Manifest (GET + POST + HEAD + OPTIONS)
 # ==========================================================
-@app.api_route("/", methods=["GET", "POST"])
+from fastapi.responses import JSONResponse
+
+@app.api_route("/", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def root_manifest():
-    print("[INFO] Served root manifest via GET/POST")
-    manifest = base_manifest()
-    manifest["schema_url"] = "/mcp/schema"
-    return JSONResponse(content=manifest)
+    """
+    Root manifest for OpenAI Agent Builder discovery.
+    Returns a fully compliant MCP manifest with capabilities and tool definitions.
+    """
+    print("[INFO] Served root manifest via GET/POST/HEAD/OPTIONS")
+
+    manifest = {
+        "version": "2025-10-01",
+        "type": "mcp_server",
+        "server_info": {
+            "type": "mcp_server",
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False,
+            },
+        },
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
+                },
+            }
+        ],
+    }
+
+    response = JSONResponse(content=manifest)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["Access-Control-Allow-Origin"] = "https://agentbuilder.openai.com"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 # ==========================================================
