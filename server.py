@@ -63,6 +63,7 @@ def build_agentbuilder_schema():
     """Unified MCP-compatible schema for Agent Builder and validators."""
     return {
         "version": "2025-10-02",
+	"mcp_version": "2025-10-20",
         "type": "mcp_server",
         "server_info": {
             "name": SERVER_NAME,
@@ -125,6 +126,7 @@ def versioned_live_manifest():
         print("[INFO] Served /v20251020/live unified schema (cache-bypass)")
         manifest = {
             "version": "2025-10-20",
+            "mcp_version": "2025-10-20",	
             "type": "mcp_server",
             "server_info": {
                 "type": "mcp_server",
