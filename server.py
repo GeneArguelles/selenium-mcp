@@ -111,6 +111,22 @@ def live_schema():
     return response
 
 # ==========================================================
+# Versioned /live endpoint (cache-bypass for Agent Builder)
+# ==========================================================
+@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def versioned_live():
+    """
+    Versioned cache-bypass alias — ensures OpenAI Agent Builder sees a fresh schema.
+    Mirrors /mcp/schema exactly.
+    """
+    print("[INFO] Served /v20251020/live unified schema (cache-bypass)")
+    response = JSONResponse(content=unified_manifest())
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+# ==========================================================
 # /mcp/schema — Strict schema endpoint for validators
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "OPTIONS"])
