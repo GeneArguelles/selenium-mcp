@@ -153,10 +153,15 @@ def versioned_live_manifest():
             ]
         }
 
-        response = JSONResponse(content=manifest)
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+        response = JSONResponse(
+            content=manifest,
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
         return response
 
     except Exception as e:
