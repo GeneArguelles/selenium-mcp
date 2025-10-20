@@ -63,7 +63,7 @@ def build_agentbuilder_schema():
     """Unified MCP-compatible schema for Agent Builder and validators."""
     return {
         "version": "2025-10-02",
-        "type": "mcp",
+        "type": "mcp_server",
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
