@@ -98,43 +98,29 @@ def root_schema():
     schema = build_agentbuilder_schema()
     return JSONResponse(content=schema)
 
-# ==========================================================
-# /live — Cache-bypass alias for Agent Builder
-# ==========================================================
-@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def live_schema():
-    print("[INFO] Served /live unified schema (cache-bypass)")
-    schema = build_agentbuilder_schema()
-    response = JSONResponse(content=schema)
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
-
 
 # ==========================================================
-# Versioned /live endpoint (MCP-compliant cache-bypass)
+# Versioned /live endpoint (OpenAI Agent Builder compatible)
 # ==========================================================
 from fastapi.responses import JSONResponse
 
 @app.api_route("/v20251020/live", methods=["GET", "POST"])
 def versioned_live_manifest():
     """
-    Versioned cache-bypass endpoint for OpenAI Agent Builder.
-    Returns an MCP-compliant manifest with flattened structure.
+    Strict MCP schema for OpenAI Agent Builder.
+    Flattened structure — no wrappers, no extra keys.
     """
     try:
-        print("[INFO] Served /v20251020/live unified schema (MCP-compliant)")
+        print("[INFO] Served /v20251020/live unified schema (strict MCP)")
 
         manifest = {
             "version": "2025-10-20",
-            "model_context_protocol": "2025-10-20",
             "type": "mcp_server",
             "server_info": {
                 "name": SERVER_NAME,
                 "description": SERVER_DESC,
                 "version": "1.0.0",
-                "runtime": platform.python_version()
+                "runtime": platform.python_version(),
             },
             "capabilities": {
                 "invocation": True,
@@ -147,14 +133,15 @@ def versioned_live_manifest():
                     "description": "Open a URL in a headless Chrome browser and return the page title.",
                     "parameters": {
                         "type": "object",
-                        "properties": {"url": {"type": "string"}},
+                        "properties": {
+                            "url": {"type": "string"}
+                        },
                         "required": ["url"]
                     }
                 }
             ]
         }
 
-        # ✅ Build response with explicit JSON content type & cache control
         response = JSONResponse(
             content=manifest,
             media_type="application/json; charset=utf-8"
