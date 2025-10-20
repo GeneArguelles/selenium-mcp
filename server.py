@@ -118,7 +118,7 @@ from fastapi import Response
 
 @app.api_route(
     "/v20251020/live",
-    methods=["GET", "POST", "OPTIONS"],
+    methods=["GET", "POST"],
     response_class=Response,  # 👈 force raw Response class
 )
 def versioned_live_manifest():
