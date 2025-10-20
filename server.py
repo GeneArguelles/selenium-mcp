@@ -153,16 +153,14 @@ def versioned_live_manifest():
             ]
         }
 
-        response = JSONResponse(
-            content=manifest,
-            media_type="application/json; charset=utf-8",
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            },
-        )
-        return response
+	manifest["status"] = "ok"
+
+	response = JSONResponse(content=manifest)
+	response.headers["Content-Type"] = "application/json; charset=utf-8"
+	response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+	response.headers["Pragma"] = "no-cache"
+	response.headers["Expires"] = "0"
+	return response
 
     except Exception as e:
         print(f"[ERROR] /v20251020/live failed: {e}")
