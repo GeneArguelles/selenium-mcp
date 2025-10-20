@@ -111,72 +111,66 @@ def live_schema():
     response.headers["Expires"] = "0"
     return response
 
-# ==========================================================
-# Versioned /live endpoint (cache-bypass for Agent Builder)
-# ==========================================================
-from fastapi import Response
 
-@app.api_route(
-    "/v20251020/live",
-    methods=["GET", "POST"],
-    response_class=Response,  # 👈 force raw Response class
-)
+# ==========================================================
+# Versioned /live endpoint (MCP-compliant cache-bypass)
+# ==========================================================
+from fastapi.responses import JSONResponse
+
+@app.api_route("/v20251020/live", methods=["GET", "POST"])
 def versioned_live_manifest():
     """
     Versioned cache-bypass endpoint for OpenAI Agent Builder.
-    Forces explicit application/json MIME type and disables caching.
+    Returns an MCP-compliant manifest with flattened structure.
     """
-    import json
     try:
         print("[INFO] Served /v20251020/live unified schema (MCP-compliant)")
 
         manifest = {
+            "version": "2025-10-20",
             "model_context_protocol": "2025-10-20",
             "type": "mcp_server",
-            "mcp": {
-                "version": "2025-10-20",
-                "server": {
-                    "name": SERVER_NAME,
-                    "description": SERVER_DESC,
-                    "version": "1.0.0",
-                    "runtime": platform.python_version(),
-                },
-                "capabilities": {
-                    "invocation": True,
-                    "streaming": False,
-                    "multi_tool": False,
-                },
-                "tools": [
-                    {
-                        "name": "selenium_open_page",
-                        "description": "Open a URL in a headless Chrome browser and return the page title.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {"url": {"type": "string"}},
-                            "required": ["url"],
-                        },
-                    }
-                ],
+            "server_info": {
+                "name": SERVER_NAME,
+                "description": SERVER_DESC,
+                "version": "1.0.0",
+                "runtime": platform.python_version()
             },
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False
+            },
+            "tools": [
+                {
+                    "name": "selenium_open_page",
+                    "description": "Open a URL in a headless Chrome browser and return the page title.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"url": {"type": "string"}},
+                        "required": ["url"]
+                    }
+                }
+            ]
         }
 
-        body = json.dumps(manifest, ensure_ascii=False)
-        headers = {
-            "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
-            "Access-Control-Allow-Headers": "*",
-        }
-
-        # 🚀 Explicitly construct and return raw Response object
-        return Response(content=body, status_code=200, headers=headers, media_type="application/json; charset=utf-8")
+        # ✅ Build response with explicit JSON content type & cache control
+        response = JSONResponse(
+            content=manifest,
+            media_type="application/json; charset=utf-8"
+        )
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     except Exception as e:
-        err = json.dumps({"error": str(e)})
-        return Response(content=err, status_code=500, media_type="application/json; charset=utf-8")
+        print(f"[ERROR] /v20251020/live failed: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)},
+            media_type="application/json; charset=utf-8"
+        )
 
 
 # ==========================================================
