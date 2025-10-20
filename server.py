@@ -114,13 +114,13 @@ def live_schema():
 # ==========================================================
 # Versioned /live endpoint (cache-bypass for Agent Builder)
 # ==========================================================
-from fastapi.responses import JSONResponse
+from fastapi import Response
 
 @app.api_route("/v20251020/live", methods=["GET", "POST", "OPTIONS"])
 async def versioned_live_manifest():
     """
     Versioned cache-bypass endpoint for OpenAI Agent Builder.
-    Provides the MCP-compliant JSON schema with correct MIME headers.
+    Forces correct application/json MIME type and disables caching.
     """
     try:
         print("[INFO] Served /v20251020/live unified schema (MCP-compliant)")
@@ -162,28 +162,31 @@ async def versioned_live_manifest():
             }
         }
 
-        # 🔥 Force application/json response with correct charset and no caching
-        response = JSONResponse(
-            content=manifest,
-            media_type="application/json; charset=utf-8"
+        # 🧱 Force JSON serialization ourselves, no FastAPI guessing
+        import json
+        body = json.dumps(manifest, ensure_ascii=False, indent=None)
+
+        return Response(
+            content=body,
+            status_code=200,
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
+                "Access-Control-Allow-Headers": "*"
+            },
         )
-        response.headers.update({
-            "Content-Type": "application/json; charset=utf-8",
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
-            "Access-Control-Allow-Headers": "*",
-        })
-        return response
 
     except Exception as e:
         print(f"[ERROR] /v20251020/live failed: {e}")
-        return JSONResponse(
+        err = {"error": str(e)}
+        return Response(
+            content=json.dumps(err),
             status_code=500,
-            content={"error": str(e)},
-            media_type="application/json; charset=utf-8"
+            media_type="application/json; charset=utf-8",
         )
 
 
