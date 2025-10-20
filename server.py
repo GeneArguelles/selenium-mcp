@@ -116,37 +116,35 @@ def live_schema():
 # ==========================================================
 from fastapi import Response
 
-@app.api_route("/v20251020/live", methods=["GET", "POST", "OPTIONS"])
-async def versioned_live_manifest():
+@app.api_route(
+    "/v20251020/live",
+    methods=["GET", "POST", "OPTIONS"],
+    response_class=Response,  # 👈 force raw Response class
+)
+def versioned_live_manifest():
     """
     Versioned cache-bypass endpoint for OpenAI Agent Builder.
-    Forces correct application/json MIME type and disables caching.
+    Forces explicit application/json MIME type and disables caching.
     """
+    import json
     try:
         print("[INFO] Served /v20251020/live unified schema (MCP-compliant)")
 
         manifest = {
             "model_context_protocol": "2025-10-20",
             "type": "mcp_server",
-            "endpoints": [
-                {
-                    "path": "/mcp/invoke",
-                    "method": "POST",
-                    "description": "Invoke a registered tool with provided parameters."
-                }
-            ],
             "mcp": {
                 "version": "2025-10-20",
                 "server": {
                     "name": SERVER_NAME,
                     "description": SERVER_DESC,
                     "version": "1.0.0",
-                    "runtime": platform.python_version()
+                    "runtime": platform.python_version(),
                 },
                 "capabilities": {
                     "invocation": True,
                     "streaming": False,
-                    "multi_tool": False
+                    "multi_tool": False,
                 },
                 "tools": [
                     {
@@ -155,39 +153,30 @@ async def versioned_live_manifest():
                         "parameters": {
                             "type": "object",
                             "properties": {"url": {"type": "string"}},
-                            "required": ["url"]
-                        }
+                            "required": ["url"],
+                        },
                     }
-                ]
-            }
+                ],
+            },
         }
 
-        # 🧱 Force JSON serialization ourselves, no FastAPI guessing
-        import json
-        body = json.dumps(manifest, ensure_ascii=False, indent=None)
+        body = json.dumps(manifest, ensure_ascii=False)
+        headers = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "*",
+        }
 
-        return Response(
-            content=body,
-            status_code=200,
-            media_type="application/json; charset=utf-8",
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
-                "Access-Control-Allow-Headers": "*"
-            },
-        )
+        # 🚀 Explicitly construct and return raw Response object
+        return Response(content=body, status_code=200, headers=headers, media_type="application/json; charset=utf-8")
 
     except Exception as e:
-        print(f"[ERROR] /v20251020/live failed: {e}")
-        err = {"error": str(e)}
-        return Response(
-            content=json.dumps(err),
-            status_code=500,
-            media_type="application/json; charset=utf-8",
-        )
+        err = json.dumps({"error": str(e)})
+        return Response(content=err, status_code=500, media_type="application/json; charset=utf-8")
 
 
 # ==========================================================
