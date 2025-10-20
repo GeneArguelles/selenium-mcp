@@ -116,17 +116,18 @@ def live_schema():
 # ==========================================================
 from fastapi.responses import JSONResponse
 
-@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def versioned_live_manifest():
+@app.api_route("/v20251020/live", methods=["GET", "POST", "OPTIONS"])
+async def versioned_live_manifest():
     """
     Versioned cache-bypass endpoint for OpenAI Agent Builder.
-    Mirrors /mcp/schema response and disables all caching.
+    Mirrors /mcp/schema response exactly, with explicit UTF-8 and CORS headers.
     """
     try:
         print("[INFO] Served /v20251020/live unified schema (cache-bypass)")
+
         manifest = {
             "version": "2025-10-20",
-            "mcp_version": "2025-10-20",	
+            "mcp_version": "2025-10-20",
             "type": "mcp_server",
             "server_info": {
                 "type": "mcp_server",
@@ -153,18 +154,21 @@ def versioned_live_manifest():
             ]
         }
 
-        manifest["status"] = "ok"
-
-        response = JSONResponse(content=manifest)
-        response.headers["Content-Type"] = "application/json; charset=utf-8"
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        return response
+        return JSONResponse(
+            content=manifest,
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
 
     except Exception as e:
         print(f"[ERROR] /v20251020/live failed: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 # ==========================================================
 # Versioned /live endpoint (cache-bypass for Agent Builder)
