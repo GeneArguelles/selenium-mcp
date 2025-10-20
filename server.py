@@ -104,66 +104,48 @@ def root_schema():
 # ==========================================================
 from fastapi.responses import JSONResponse
 
-@app.api_route("/v20251020/live", methods=["GET", "POST"])
+@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def versioned_live_manifest():
     """
-    Final hybrid manifest for OpenAI Agent Builder.
-    Contains both root-level and nested 'tools' arrays.
+    Strict MCP-compliant manifest for OpenAI Agent Builder.
     """
-    try:
-        print("[INFO] Served /v20251020/live unified schema (final hybrid MCP)")
+    print("[INFO] Served /v20251020/live unified schema (strict MCP)")
 
-        tools_list = [
+    manifest = {
+        "type": "mcp_server",
+        "version": "2025-10-20",
+        "server_info": {
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+        },
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False
+        },
+        "tools": [
             {
                 "name": "selenium_open_page",
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "url": {"type": "string"}
-                    },
+                    "properties": {"url": {"type": "string"}},
                     "required": ["url"]
                 }
             }
         ]
+    }
 
-        manifest = {
-            "type": "mcp_server",
-            "version": "2025-10-20",
-            "tools": tools_list,  # 👈 Root-level duplication for Agent Builder
-            "mcp": {
-                "version": "2025-10-20",
-                "server_info": {
-                    "name": SERVER_NAME,
-                    "description": SERVER_DESC,
-                    "version": "1.0.0",
-                    "runtime": platform.python_version(),
-                },
-                "capabilities": {
-                    "invocation": True,
-                    "streaming": False,
-                    "multi_tool": False
-                },
-                "tools": tools_list
-            }
-        }
-
-        response = JSONResponse(
-            content=manifest,
-            media_type="application/json; charset=utf-8"
-        )
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        return response
-
-    except Exception as e:
-        print(f"[ERROR] /v20251020/live failed: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)},
-            media_type="application/json; charset=utf-8"
-        )
+    response = JSONResponse(
+        content=manifest,
+        media_type="application/json; charset=utf-8"
+    )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 # ==========================================================
