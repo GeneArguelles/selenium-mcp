@@ -50,7 +50,7 @@ app = FastAPI(title=f"{SERVER_NAME} MCP Server")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For production: restrict to Agent Builder domain
+    allow_origins=["*", "https://chat.openai.com", "https://builder.openai.com"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
     allow_headers=["*"],
@@ -120,15 +120,21 @@ from fastapi.responses import JSONResponse
 async def versioned_live_manifest():
     """
     Versioned cache-bypass endpoint for OpenAI Agent Builder.
-    Provides the MCP-compliant JSON schema with proper nesting.
+    Provides the MCP-compliant JSON schema with correct MIME headers.
     """
     try:
         print("[INFO] Served /v20251020/live unified schema (MCP-compliant)")
 
         manifest = {
-            # 👇 NEW: required by OpenAI’s validator
             "model_context_protocol": "2025-10-20",
             "type": "mcp_server",
+            "endpoints": [
+                {
+                    "path": "/mcp/invoke",
+                    "method": "POST",
+                    "description": "Invoke a registered tool with provided parameters."
+                }
+            ],
             "mcp": {
                 "version": "2025-10-20",
                 "server": {
@@ -156,20 +162,29 @@ async def versioned_live_manifest():
             }
         }
 
-        return JSONResponse(
+        # 🔥 Force application/json response with correct charset and no caching
+        response = JSONResponse(
             content=manifest,
-            media_type="application/json; charset=utf-8",
-            headers={
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "no-store, no-cache, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            },
+            media_type="application/json; charset=utf-8"
         )
+        response.headers.update({
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "*",
+        })
+        return response
 
     except Exception as e:
         print(f"[ERROR] /v20251020/live failed: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)},
+            media_type="application/json; charset=utf-8"
+        )
 
 
 # ==========================================================
