@@ -100,46 +100,50 @@ def root_schema():
 
 
 # ==========================================================
-# Versioned /live endpoint (OpenAI Agent Builder compatible)
+# Versioned /live endpoint (Agent Builder hybrid MCP)
 # ==========================================================
 from fastapi.responses import JSONResponse
 
 @app.api_route("/v20251020/live", methods=["GET", "POST"])
 def versioned_live_manifest():
     """
-    Strict MCP schema for OpenAI Agent Builder.
-    Flattened structure — no wrappers, no extra keys.
+    Hybrid MCP manifest:
+    - Top-level 'type' and 'version' for compatibility
+    - Nested 'mcp' object for Agent Builder discovery
     """
     try:
-        print("[INFO] Served /v20251020/live unified schema (strict MCP)")
+        print("[INFO] Served /v20251020/live unified schema (hybrid MCP)")
 
         manifest = {
-            "version": "2025-10-20",
             "type": "mcp_server",
-            "server_info": {
-                "name": SERVER_NAME,
-                "description": SERVER_DESC,
-                "version": "1.0.0",
-                "runtime": platform.python_version(),
-            },
-            "capabilities": {
-                "invocation": True,
-                "streaming": False,
-                "multi_tool": False
-            },
-            "tools": [
-                {
-                    "name": "selenium_open_page",
-                    "description": "Open a URL in a headless Chrome browser and return the page title.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string"}
-                        },
-                        "required": ["url"]
+            "version": "2025-10-20",
+            "mcp": {
+                "version": "2025-10-20",
+                "server_info": {
+                    "name": SERVER_NAME,
+                    "description": SERVER_DESC,
+                    "version": "1.0.0",
+                    "runtime": platform.python_version(),
+                },
+                "capabilities": {
+                    "invocation": True,
+                    "streaming": False,
+                    "multi_tool": False
+                },
+                "tools": [
+                    {
+                        "name": "selenium_open_page",
+                        "description": "Open a URL in a headless Chrome browser and return the page title.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "url": {"type": "string"}
+                            },
+                            "required": ["url"]
+                        }
                     }
-                }
-            ]
+                ]
+            }
         }
 
         response = JSONResponse(
