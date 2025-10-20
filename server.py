@@ -100,23 +100,37 @@ def root_schema():
 
 
 # ==========================================================
-# Versioned /live endpoint (Agent Builder hybrid MCP)
+# Versioned /live endpoint (Final hybrid for Agent Builder)
 # ==========================================================
 from fastapi.responses import JSONResponse
 
 @app.api_route("/v20251020/live", methods=["GET", "POST"])
 def versioned_live_manifest():
     """
-    Hybrid MCP manifest:
-    - Top-level 'type' and 'version' for compatibility
-    - Nested 'mcp' object for Agent Builder discovery
+    Final hybrid manifest for OpenAI Agent Builder.
+    Contains both root-level and nested 'tools' arrays.
     """
     try:
-        print("[INFO] Served /v20251020/live unified schema (hybrid MCP)")
+        print("[INFO] Served /v20251020/live unified schema (final hybrid MCP)")
+
+        tools_list = [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"]
+                }
+            }
+        ]
 
         manifest = {
             "type": "mcp_server",
             "version": "2025-10-20",
+            "tools": tools_list,  # 👈 Root-level duplication for Agent Builder
             "mcp": {
                 "version": "2025-10-20",
                 "server_info": {
@@ -130,19 +144,7 @@ def versioned_live_manifest():
                     "streaming": False,
                     "multi_tool": False
                 },
-                "tools": [
-                    {
-                        "name": "selenium_open_page",
-                        "description": "Open a URL in a headless Chrome browser and return the page title.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "url": {"type": "string"}
-                            },
-                            "required": ["url"]
-                        }
-                    }
-                ]
+                "tools": tools_list
             }
         }
 
