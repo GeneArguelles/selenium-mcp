@@ -120,38 +120,37 @@ from fastapi.responses import JSONResponse
 async def versioned_live_manifest():
     """
     Versioned cache-bypass endpoint for OpenAI Agent Builder.
-    Mirrors /mcp/schema response exactly, with explicit UTF-8 and CORS headers.
+    Provides the MCP-compliant JSON schema with proper nesting.
     """
     try:
-        print("[INFO] Served /v20251020/live unified schema (cache-bypass)")
+        print("[INFO] Served /v20251020/live unified schema (MCP-compliant)")
 
         manifest = {
-            "version": "2025-10-20",
-            "mcp_version": "2025-10-20",
-            "type": "mcp_server",
-            "server_info": {
-                "type": "mcp_server",
-                "name": SERVER_NAME,
-                "description": SERVER_DESC,
-                "version": "1.0.0",
-                "runtime": platform.python_version(),
+            "mcp": {
+                "version": "2025-10-20",
+                "server": {
+                    "name": SERVER_NAME,
+                    "description": SERVER_DESC,
+                    "version": "1.0.0",
+                    "runtime": platform.python_version()
+                },
                 "capabilities": {
                     "invocation": True,
                     "streaming": False,
                     "multi_tool": False
-                }
-            },
-            "tools": [
-                {
-                    "name": "selenium_open_page",
-                    "description": "Open a URL in a headless Chrome browser and return the page title.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"url": {"type": "string"}},
-                        "required": ["url"]
+                },
+                "tools": [
+                    {
+                        "name": "selenium_open_page",
+                        "description": "Open a URL in a headless Chrome browser and return the page title.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"url": {"type": "string"}},
+                            "required": ["url"]
+                        }
                     }
-                }
-            ]
+                ]
+            }
         }
 
         return JSONResponse(
