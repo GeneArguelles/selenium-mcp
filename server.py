@@ -113,6 +113,57 @@ def live_schema():
 # ==========================================================
 # Versioned /live endpoint (cache-bypass for Agent Builder)
 # ==========================================================
+from fastapi.responses import JSONResponse
+
+@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def versioned_live_manifest():
+    """
+    Versioned cache-bypass endpoint for OpenAI Agent Builder.
+    Mirrors /mcp/schema response and disables all caching.
+    """
+    try:
+        print("[INFO] Served /v20251020/live unified schema (cache-bypass)")
+        manifest = {
+            "version": "2025-10-20",
+            "type": "mcp_server",
+            "server_info": {
+                "type": "mcp_server",
+                "name": SERVER_NAME,
+                "description": SERVER_DESC,
+                "version": "1.0.0",
+                "runtime": platform.python_version(),
+                "capabilities": {
+                    "invocation": True,
+                    "streaming": False,
+                    "multi_tool": False
+                }
+            },
+            "tools": [
+                {
+                    "name": "selenium_open_page",
+                    "description": "Open a URL in a headless Chrome browser and return the page title.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"url": {"type": "string"}},
+                        "required": ["url"]
+                    }
+                }
+            ]
+        }
+
+        response = JSONResponse(content=manifest)
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+
+    except Exception as e:
+        print(f"[ERROR] /v20251020/live failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# ==========================================================
+# Versioned /live endpoint (cache-bypass for Agent Builder)
+# ==========================================================
 @app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def versioned_live():
     """
