@@ -126,6 +126,9 @@ async def versioned_live_manifest():
         print("[INFO] Served /v20251020/live unified schema (MCP-compliant)")
 
         manifest = {
+            # 👇 NEW: required by OpenAI’s validator
+            "model_context_protocol": "2025-10-20",
+            "type": "mcp_server",
             "mcp": {
                 "version": "2025-10-20",
                 "server": {
