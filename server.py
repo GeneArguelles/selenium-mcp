@@ -100,52 +100,70 @@ def root_schema():
 
 
 # ==========================================================
-# Versioned /live endpoint (Final hybrid for Agent Builder)
+# Versioned /live endpoint (strict MCP for Agent Builder)
 # ==========================================================
-from fastapi.responses import JSONResponse
-
 @app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def versioned_live_manifest():
+async def versioned_live_manifest():
     """
-    Strict MCP-compliant manifest for OpenAI Agent Builder.
+    Strict MCP manifest for OpenAI Agent Builder.
     """
-    print("[INFO] Served /v20251020/live unified schema (strict MCP)")
+    from fastapi.responses import JSONResponse
 
-    manifest = {
-        "type": "mcp_server",
-        "version": "2025-10-20",
-        "server_info": {
-            "name": SERVER_NAME,
-            "description": SERVER_DESC,
-            "version": "1.0.0",
-            "runtime": platform.python_version(),
-        },
-        "capabilities": {
-            "invocation": True,
-            "streaming": False,
-            "multi_tool": False
-        },
-        "tools": [
-            {
-                "name": "selenium_open_page",
-                "description": "Open a URL in a headless Chrome browser and return the page title.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"]
-                }
+    try:
+        print("[INFO] Served /v20251020/live unified schema (strict MCP)")
+
+        manifest = {
+            "version": "2025-10-20",
+            "mcp_server": {
+                "name": "Selenium",
+                "description": "MCP server providing headless browser automation via Selenium.",
+                "version": "1.0.0",
+                "runtime": platform.python_version(),
+                "capabilities": {
+                    "invocation": True,
+                    "streaming": False,
+                    "multi_tool": False
+                },
+                "tools": [
+                    {
+                        "name": "selenium_open_page",
+                        "description": "Open a URL in a headless Chrome browser and return the page title.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "url": {"type": "string"}
+                            },
+                            "required": ["url"]
+                        }
+                    }
+                ]
             }
-        ]
-    }
+        }
 
-    response = JSONResponse(
-        content=manifest,
-        media_type="application/json; charset=utf-8"
-    )
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
+        response = JSONResponse(
+            content=manifest,
+            media_type="application/json; charset=utf-8",
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+        return response
+
+    except Exception as e:
+        print(f"[ERROR] /v20251020/live failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+# ==========================================================
+# Backward compatibility redirect: /live → /v20251020/live
+# ==========================================================
+@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def redirect_live_to_versioned():
+    from fastapi.responses import RedirectResponse
+    print("[INFO] Redirected /live → /v20251020/live")
+    return RedirectResponse(url="/v20251020/live", status_code=307)
 
 
 # ==========================================================
