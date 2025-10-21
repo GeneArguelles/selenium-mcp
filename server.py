@@ -232,31 +232,30 @@ print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 
 
 # ==========================================================
-# Versioned /live endpoint (strict MCP manifest)
+# Versioned /live endpoint (strict MCP, accepts GET + POST)
 # ==========================================================
-from fastapi.responses import JSONResponse
-import platform
 
-@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+@app.api_route("/v20251021a/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def versioned_live_manifest():
     """
-    Strict MCP-compliant manifest for OpenAI Agent Builder.
+    Unified MCP manifest for OpenAI Agent Builder.
+    Accepts both GET and POST to comply with client-side variations.
     """
-    print("[INFO] Served /v20251020/live unified schema (strict MCP)")
+    print("[INFO] Served /v20251021a/live unified schema (strict MCP)")
 
     manifest = {
         "type": "mcp_server",
-        "version": "2025-10-20",
+        "version": "2025-10-21",
         "server_info": {
-            "name": "Selenium",
-            "description": "MCP server providing headless browser automation via Selenium.",
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
             "version": "1.0.0",
             "runtime": platform.python_version(),
         },
         "capabilities": {
             "invocation": True,
             "streaming": False,
-            "multi_tool": False
+            "multi_tool": False,
         },
         "tools": [
             {
@@ -264,13 +263,11 @@ def versioned_live_manifest():
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "url": { "type": "string" }
-                    },
-                    "required": ["url"]
-                }
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
+                },
             }
-        ]
+        ],
     }
 
     response = JSONResponse(
