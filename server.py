@@ -232,30 +232,31 @@ print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 
 
 # ==========================================================
-# Versioned /live endpoint (strict MCP manifest for Agent Builder)
+# Versioned /live endpoint (strict MCP manifest)
 # ==========================================================
 from fastapi.responses import JSONResponse
+import platform
 
-@app.api_route(f"/{MCP_VERSION}/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def versioned_live_manifest():
     """
     Strict MCP-compliant manifest for OpenAI Agent Builder.
     """
-    print(f"[INFO] Served /{MCP_VERSION}/live unified schema (strict MCP)")
+    print("[INFO] Served /v20251020/live unified schema (strict MCP)")
 
     manifest = {
         "type": "mcp_server",
         "version": "2025-10-20",
         "server_info": {
-            "name": SERVER_NAME,
-            "description": SERVER_DESC,
+            "name": "Selenium",
+            "description": "MCP server providing headless browser automation via Selenium.",
             "version": "1.0.0",
             "runtime": platform.python_version(),
         },
         "capabilities": {
             "invocation": True,
             "streaming": False,
-            "multi_tool": False,
+            "multi_tool": False
         },
         "tools": [
             {
@@ -263,15 +264,18 @@ def versioned_live_manifest():
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
-                },
+                    "properties": {
+                        "url": { "type": "string" }
+                    },
+                    "required": ["url"]
+                }
             }
-        ],
+        ]
     }
 
     response = JSONResponse(
-        content=manifest, media_type="application/json; charset=utf-8"
+        content=manifest,
+        media_type="application/json; charset=utf-8"
     )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
