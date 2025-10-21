@@ -21,6 +21,59 @@ from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
+
+# ==========================================================
+# FastAPI Init + CORS
+# ==========================================================
+app = FastAPI(title=f"{SERVER_NAME} MCP Server")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*", "https://chat.openai.com", "https://builder.openai.com"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
+    allow_headers=["*"],
+)
+
+
+# ==========================================================
+# AUTO-INCREMENTING VERSION PUSH ROUTINE FOR MCP SERVER
+# ==========================================================
+        
+VERSION_FILE = "mcp_version.txt"
+        
+def get_next_version():
+    """Automatically generate or increment version suffix for /vYYYYMMDD/live"""
+    today = datetime.utcnow().strftime("%Y%m%d")
+    base = f"v{today}"
+            
+    if not os.path.exists(VERSION_FILE):
+        with open(VERSION_FILE, "w") as f:
+            f.write(base + "a")
+        return base + "a" 
+        
+    with open(VERSION_FILE, "r") as f:
+        last = f.read().strip()
+    
+    # Example: v20251020a → v20251020b
+    match = re.match(rf"v{today}([a-z])", last)
+    if match:
+        new_suffix = chr(ord(match.group(1)) + 1)
+        new_version = f"{base}{new_suffix}"
+    else:
+        # Either new day or malformed — reset to 'a'
+        new_version = base + "a"
+    
+    with open(VERSION_FILE, "w") as f:
+        f.write(new_version)
+    
+    return new_version
+
+# Automatically determine versioned endpoint string
+MCP_VERSION = get_next_version()
+print(f"[INFO] Auto-incremented MCP version: {MCP_VERSION}")
+
+
 # ==========================================================
 # PUSH ROUTINE FOR MANUAL DEPLOYMENT VALIDATION (SAFE MODE)
 # ==========================================================
@@ -71,45 +124,6 @@ def run_push_validation():
 
 # Run validation on startup
 run_push_validation()
-
-
-# ==========================================================
-# AUTO-INCREMENTING VERSION PUSH ROUTINE FOR MCP SERVER
-# ==========================================================
-
-VERSION_FILE = "mcp_version.txt"
-
-def get_next_version():
-    """Automatically generate or increment version suffix for /vYYYYMMDD/live"""
-    today = datetime.utcnow().strftime("%Y%m%d")
-    base = f"v{today}"
-
-    if not os.path.exists(VERSION_FILE):
-        with open(VERSION_FILE, "w") as f:
-            f.write(base + "a")
-        return base + "a"
-
-    with open(VERSION_FILE, "r") as f:
-        last = f.read().strip()
-
-    # Example: v20251020a → v20251020b
-    match = re.match(rf"v{today}([a-z])", last)
-    if match:
-        new_suffix = chr(ord(match.group(1)) + 1)
-        new_version = f"{base}{new_suffix}"
-    else:
-        # Either new day or malformed — reset to 'a'
-        new_version = base + "a"
-
-    with open(VERSION_FILE, "w") as f:
-        f.write(new_version)
-
-    return new_version
-
-
-# Automatically determine versioned endpoint string
-MCP_VERSION = get_next_version()
-print(f"[INFO] Auto-incremented MCP version: {MCP_VERSION}")
 
 
 # ==========================================================
@@ -215,18 +229,6 @@ CHROME_BINARY = (
 )
 print(f"[INFO] Chrome binary resolved as: {CHROME_BINARY}")
 
-# ==========================================================
-# FastAPI Init + CORS
-# ==========================================================
-app = FastAPI(title=f"{SERVER_NAME} MCP Server")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*", "https://chat.openai.com", "https://builder.openai.com"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS", "HEAD"],
-    allow_headers=["*"],
-)
 
 # ==========================================================
 # Unified Schema Builder (used by /, /live, /mcp/schema)
@@ -260,6 +262,7 @@ def build_agentbuilder_schema():
             }
         ],
     }
+
 
 # ==========================================================
 # Root Schema (Agent Builder entry)
@@ -382,6 +385,7 @@ def schema_endpoint():
     print("[INFO] Served /mcp/schema")
     schema = build_agentbuilder_schema()
     return JSONResponse(content=schema)
+
 
 # ==========================================================
 # /health — Detailed runtime probe
