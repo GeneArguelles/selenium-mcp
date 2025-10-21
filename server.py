@@ -113,6 +113,82 @@ print(f"[INFO] Auto-incremented MCP version: {MCP_VERSION}")
 
 
 # ==========================================================
+# AUTO-ANNOUNCE MCP URL + SELF-TEST INVOKE + LATENCY METRICS
+# ==========================================================
+@app.on_event("startup")
+async def announce_mcp_url():
+    """
+    Prints the ready-to-use MCP connection URL and automatically runs
+    a self-validation test invoking the selenium_open_page tool.
+    Logs include HTTP status, latency, and title extraction.
+    """
+    import subprocess, json, time
+
+    nonce = int(time.time())
+    mcp_url = f"https://selenium-mcp.onrender.com/{MCP_VERSION}/live?nonce={nonce}&refresh=true"
+
+    print("\n==========================================================")
+    print(f"[MCP] Ready! Copy this URL for Agent Builder:\n{mcp_url}")
+    print("----------------------------------------------------------")
+    print("[MCP] Running automated invoke test (https://example.com)...")
+
+    invoke_cmd = [
+        "curl", "-s", "-w",
+        "HTTP_STATUS:%{http_code} TIME_TOTAL:%{time_total}",
+        "-X", "POST",
+        "https://selenium-mcp.onrender.com/mcp/invoke",
+        "-H", "Content-Type: application/json",
+        "-d", '{"tool": "selenium_open_page", "arguments": {"url": "https://example.com"}}'
+    ]
+
+    start = time.time()
+    try:
+        result = subprocess.run(invoke_cmd, capture_output=True, text=True, timeout=25)
+        end = time.time()
+
+        output = result.stdout.strip()
+        status_code = "N/A"
+        latency_ms = round((end - start) * 1000, 2)
+
+        if "HTTP_STATUS:" in output:
+            # Separate JSON and curl -w metadata
+            parts = output.split("HTTP_STATUS:")
+            json_part = parts[0].strip()
+            meta_part = parts[1].strip()
+            if "TIME_TOTAL:" in meta_part:
+                status_code, time_total = meta_part.split("TIME_TOTAL:")
+                status_code = status_code.strip()
+                latency_ms = round(float(time_total) * 1000, 2)
+        else:
+            json_part = output
+
+        if json_part:
+            try:
+                parsed = json.loads(json_part)
+                title = parsed.get("title", "No title")
+                print(f"[MCP] ✅ Invoke test successful — Page Title: {title}")
+            except json.JSONDecodeError:
+                print("[MCP] ⚠️ Received non-JSON output:")
+                print(json_part)
+        else:
+            print("[MCP] ❌ Empty response from invoke test.")
+
+        print(f"[MCP] HTTP Status: {status_code} | Latency: {latency_ms} ms")
+
+    except subprocess.TimeoutExpired:
+        print("[MCP] ❌ Timeout — Invoke test took too long (>25s).")
+    except Exception as e:
+        print(f"[MCP] ❌ Invoke test exception: {e}")
+
+    print("----------------------------------------------------------")
+    print("[MCP] Manual test command:")
+    print("curl -s -X POST https://selenium-mcp.onrender.com/mcp/invoke "
+          "-H 'Content-Type: application/json' "
+          "-d '{\"tool\": \"selenium_open_page\", \"arguments\": {\"url\": \"https://example.com\"}}' | jq .")
+    print("==========================================================\n")
+
+
+# ==========================================================
 # Environment Variable Setup (Render + Local)
 # ==========================================================
 RENDER_CHROME_PATH = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
