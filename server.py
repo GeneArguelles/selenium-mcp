@@ -164,6 +164,18 @@ def versioned_live():
     response.headers["Expires"] = "0"
     return response
 
+
+# ==========================================================
+# Backward compatibility redirect: /live → /v20251020/live
+# ==========================================================
+@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def redirect_live_to_versioned():
+    """Redirect old /live calls to the current versioned endpoint."""
+    from fastapi.responses import RedirectResponse
+    print("[INFO] Redirected /live → /v20251020/live")
+    return RedirectResponse(url="/v20251020/live", status_code=307)
+
+
 # ==========================================================
 # /mcp/schema — Strict schema endpoint for validators
 # ==========================================================
