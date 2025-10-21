@@ -251,31 +251,49 @@ def serve_live_direct(request: Request):
 
 
 # ==========================================================
-# Versioned /live endpoint (strict MCP, dynamic auto-version)
+# Versioned /live endpoint (strict MCP, GET + POST compliant)
 # ==========================================================
-@app.on_event("startup")
-def register_dynamic_live_endpoint():
+@app.api_route(f"/{MCP_VERSION}/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def versioned_live(request: Request):
     """
-    Dynamically registers the versioned /live endpoint based on the
-    current MCP_VERSION value (e.g., v20251021a). This ensures the
-    OpenAI Agent Builder always fetches the correct schema version.
+    Serves the versioned MCP manifest for OpenAI Agent Builder.
+    Accepts GET and POST to satisfy validation and tooling checks.
     """
-    from fastapi.responses import JSONResponse
+    print(f"[INFO] Served versioned endpoint: /{MCP_VERSION}/live")
 
-    live_path = f"/{MCP_VERSION}/live"
+    manifest = {
+        "type": "mcp_server",
+        "version": MCP_VERSION,
+        "server_info": {
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+        },
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False,
+        },
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"],
+                },
+            },
+        ],
+    }
 
-    @app.api_route(live_path, methods=["GET", "POST", "HEAD", "OPTIONS"])
-    def versioned_live(request: Request):
-        print(f"[INFO] Served {request.method} {live_path} unified schema (strict MCP)")
-
-        schema = unified_manifest() if "unified_manifest" in globals() else build_agentbuilder_schema()
-        response = JSONResponse(content=schema)
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        return response
-
-    print(f"[INFO] MCP dynamic path registered: {live_path}")
+    # Return JSON response with strict no-cache headers
+    response = JSONResponse(content=manifest)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 # ==========================================================
