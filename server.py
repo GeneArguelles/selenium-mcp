@@ -100,25 +100,60 @@ def root_schema():
 
 
 # ==========================================================
-# Versioned /live endpoint (OpenAI MCP Spec 2025-10-20)
+# Dynamic Version Incrementer for MCP Schema Endpoint
 # ==========================================================
-@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def versioned_live_manifest():
-    """Final MCP manifest that Agent Builder recognizes."""
-    from fastapi.responses import JSONResponse
-    import platform
+import os
+import string
+from datetime import datetime
 
-    print("[INFO] Served /v20251020/live unified schema (OpenAI MCP spec 2025-10-20)")
+BASE_VERSION = "v20251020"
+SUFFIX_FILE = "/tmp/mcp_version_suffix.txt"
+
+def get_next_suffix():
+    """Retrieve and increment the MCP suffix stored in SUFFIX_FILE."""
+    try:
+        with open(SUFFIX_FILE, "r") as f:
+            current = f.read().strip()
+    except FileNotFoundError:
+        current = "a"
+
+    # Increment alphabetical suffix
+    if current and current[-1].isalpha():
+        if current[-1] == "z":
+            new = current + "a"
+        else:
+            new = current[:-1] + chr(ord(current[-1]) + 1)
+    else:
+        new = "a"
+
+    with open(SUFFIX_FILE, "w") as f:
+        f.write(new)
+    return new
+
+MCP_SUFFIX = get_next_suffix()
+MCP_VERSIONED_PATH = f"/{BASE_VERSION}{MCP_SUFFIX}/live"
+print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
+
+# ==========================================================
+# Versioned /live endpoint (auto-incremented for Agent Builder)
+# ==========================================================
+from fastapi.responses import JSONResponse
+@app.api_route(MCP_VERSIONED_PATH, methods=["GET", "POST", "HEAD", "OPTIONS"])
+def versioned_live_manifest():
+    """
+    Strict MCP-compliant manifest for OpenAI Agent Builder.
+    Auto-incremented version ensures cache busting on each redeploy.
+    """
+    print(f"[INFO] Served {MCP_VERSIONED_PATH} unified schema (auto-refresh MCP)")
 
     manifest = {
-        "model_context_protocol": "2025-10-20",
-        "version": "1.0.0",
         "type": "mcp_server",
+        "version": datetime.utcnow().strftime("%Y-%m-%d"),
         "server_info": {
-            "name": "Selenium",
-            "description": "MCP server providing headless browser automation via Selenium.",
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
             "version": "1.0.0",
-            "runtime": platform.python_version()
+            "runtime": platform.python_version(),
         },
         "capabilities": {
             "invocation": True,
@@ -131,63 +166,28 @@ async def versioned_live_manifest():
                 "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "url": {"type": "string"}
-                    },
+                    "properties": {"url": {"type": "string"}},
                     "required": ["url"]
                 }
             }
         ]
     }
 
-    return JSONResponse(
-        content=manifest,
-        media_type="application/json; charset=utf-8",
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
-    )
-
-
-# ==========================================================
-# Backward compatibility redirect: /live → /v20251020/live
-# ==========================================================
-@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def redirect_live_to_versioned():
-    """Redirect old /live calls to the versioned endpoint."""
-    from fastapi.responses import RedirectResponse
-    print("[INFO] Redirected /live → /v20251020/live")
-    return RedirectResponse(url="/v20251020/live", status_code=307)
-
-
-# ==========================================================
-# Versioned /live endpoint (cache-bypass for Agent Builder)
-# ==========================================================
-@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def versioned_live():
-    """
-    Versioned cache-bypass alias — ensures OpenAI Agent Builder sees a fresh schema.
-    Mirrors /mcp/schema exactly.
-    """
-    print("[INFO] Served /v20251020/live unified schema (cache-bypass)")
-    response = JSONResponse(content=unified_manifest())
+    response = JSONResponse(content=manifest, media_type="application/json; charset=utf-8")
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
 
-
 # ==========================================================
-# Backward compatibility redirect: /live → /v20251020/live
+# Legacy Redirect for /live → latest auto-versioned endpoint
 # ==========================================================
+from fastapi.responses import RedirectResponse
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def redirect_live_to_versioned():
-    """Redirect old /live calls to the current versioned endpoint."""
-    from fastapi.responses import RedirectResponse
-    print("[INFO] Redirected /live → /v20251020/live")
-    return RedirectResponse(url="/v20251020/live", status_code=307)
+async def redirect_live_to_dynamic():
+    """Redirect old /live calls to the newest versioned MCP path."""
+    print(f"[INFO] Redirected /live → {MCP_VERSIONED_PATH}")
+    return RedirectResponse(url=MCP_VERSIONED_PATH, status_code=307)
 
 
 # ==========================================================
