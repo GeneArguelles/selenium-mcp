@@ -5,16 +5,111 @@
 # Provides headless browser automation endpoints for OpenAI
 # Agent Builder via the Model Context Protocol (MCP).
 # ==========================================================
-
+# Imports
+# ==========================================================
 import os
+import re
 import time
 import platform
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+import hashlib
+import requests
+from datetime import datetime
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+
+# ==========================================================
+# PUSH ROUTINE FOR MANUAL DEPLOYMENT VALIDATION (SAFE MODE)
+# ==========================================================
+
+BASE_URL = "https://selenium-mcp.onrender.com"
+STATIC_VERSION = "v20251020"   # Keep fixed until tools load properly
+
+def generate_nonce():
+    """Generate unique nonce like $(date +%s%N | sha1sum | cut -c1-10)"""
+    seed = str(time.time()).encode("utf-8")
+    return hashlib.sha1(seed).hexdigest()[:10]
+
+def build_mcp_url():
+    """Constructs full MCP URL for this push"""
+    nonce = generate_nonce()
+    return f"{BASE_URL}/{STATIC_VERSION}/live?nonce={nonce}&refresh=true"
+
+def validate_schema(url):
+    """Fetch manifest and validate essential MCP keys"""
+    try:
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        print("-----------------------------------------------------------")
+        print(f"[PUSH] MCP URL: {url}")
+        print(f"[PUSH] HTTP Status: {response.status_code}")
+        if "tools" in data:
+            print(f"[PUSH] ✅ Found {len(data['tools'])} tool(s) in manifest.")
+        else:
+            print(f"[PUSH] ⚠️ No tools found in manifest!")
+        if data.get("type") == "mcp_server":
+            print("[PUSH] ✅ Type is MCP-compliant.")
+        else:
+            print("[PUSH] ⚠️ Type key missing or incorrect.")
+        print("-----------------------------------------------------------")
+    except Exception as e:
+        print("[PUSH] ❌ Validation failed:", e)
+
+def run_push_validation():
+    """Main trigger for deployment validation routine"""
+    url = build_mcp_url()
+    print("===========================================================")
+    print(f"[PUSH] Starting MCP validation push @ {time.ctime()}")
+    print("===========================================================")
+    validate_schema(url)
+    print("===========================================================")
+    print("[PUSH] Validation complete. Copy URL above for Agent Builder.")
+    print("===========================================================")
+
+# Run validation on startup
+run_push_validation()
+
+
+# ==========================================================
+# AUTO-INCREMENTING VERSION PUSH ROUTINE FOR MCP SERVER
+# ==========================================================
+
+VERSION_FILE = "mcp_version.txt"
+
+def get_next_version():
+    """Automatically generate or increment version suffix for /vYYYYMMDD/live"""
+    today = datetime.utcnow().strftime("%Y%m%d")
+    base = f"v{today}"
+
+    if not os.path.exists(VERSION_FILE):
+        with open(VERSION_FILE, "w") as f:
+            f.write(base + "a")
+        return base + "a"
+
+    with open(VERSION_FILE, "r") as f:
+        last = f.read().strip()
+
+    # Example: v20251020a → v20251020b
+    match = re.match(rf"v{today}([a-z])", last)
+    if match:
+        new_suffix = chr(ord(match.group(1)) + 1)
+        new_version = f"{base}{new_suffix}"
+    else:
+        # Either new day or malformed — reset to 'a'
+        new_version = base + "a"
+
+    with open(VERSION_FILE, "w") as f:
+        f.write(new_version)
+
+    return new_version
+
+
+# Automatically determine versioned endpoint string
+MCP_VERSION = get_next_version()
+print(f"[INFO] Auto-incremented MCP version: {MCP_VERSION}")
+
 
 # ==========================================================
 # Environment Variable Setup (Render + Local)
@@ -140,10 +235,12 @@ print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 # ==========================================================
 from fastapi.responses import JSONResponse
 
-@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+@app.api_route(f"/{MCP_VERSION}/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def versioned_live_manifest():
-    """Strict MCP-compliant manifest for OpenAI Agent Builder."""
-    print("[INFO] Served /v20251020/live unified schema (strict MCP)")
+    """
+    Strict MCP-compliant manifest for OpenAI Agent Builder.
+    """
+    print(f"[INFO] Served /{MCP_VERSION}/live unified schema (strict MCP)")
 
     manifest = {
         "type": "mcp_server",
@@ -189,8 +286,7 @@ from fastapi.responses import RedirectResponse
 async def redirect_live_to_dynamic():
     """Redirect old /live calls to the newest versioned MCP path."""
     print(f"[INFO] Redirected /live → {MCP_VERSIONED_PATH}")
-    return RedirectResponse(url=MCP_VERSIONED_PATH, status_code=307)
-
+    return RedirectResponse(url=f"/{MCP_VERSION}/live", status_code=307)
 
 # ==========================================================
 # /mcp/schema — Strict schema endpoint for validators
