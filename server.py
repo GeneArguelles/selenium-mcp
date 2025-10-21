@@ -134,21 +134,20 @@ MCP_SUFFIX = get_next_suffix()
 MCP_VERSIONED_PATH = f"/{BASE_VERSION}{MCP_SUFFIX}/live"
 print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 
+
 # ==========================================================
-# Versioned /live endpoint (auto-incremented for Agent Builder)
+# Versioned /live endpoint (strict MCP manifest for Agent Builder)
 # ==========================================================
 from fastapi.responses import JSONResponse
-@app.api_route(MCP_VERSIONED_PATH, methods=["GET", "POST", "HEAD", "OPTIONS"])
+
+@app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def versioned_live_manifest():
-    """
-    Strict MCP-compliant manifest for OpenAI Agent Builder.
-    Auto-incremented version ensures cache busting on each redeploy.
-    """
-    print(f"[INFO] Served {MCP_VERSIONED_PATH} unified schema (auto-refresh MCP)")
+    """Strict MCP-compliant manifest for OpenAI Agent Builder."""
+    print("[INFO] Served /v20251020/live unified schema (strict MCP)")
 
     manifest = {
         "type": "mcp_server",
-        "version": datetime.utcnow().strftime("%Y-%m-%d"),
+        "version": "2025-10-20",
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -158,7 +157,7 @@ def versioned_live_manifest():
         "capabilities": {
             "invocation": True,
             "streaming": False,
-            "multi_tool": False
+            "multi_tool": False,
         },
         "tools": [
             {
@@ -167,17 +166,20 @@ def versioned_live_manifest():
                 "parameters": {
                     "type": "object",
                     "properties": {"url": {"type": "string"}},
-                    "required": ["url"]
-                }
+                    "required": ["url"],
+                },
             }
-        ]
+        ],
     }
 
-    response = JSONResponse(content=manifest, media_type="application/json; charset=utf-8")
+    response = JSONResponse(
+        content=manifest, media_type="application/json; charset=utf-8"
+    )
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
 
 # ==========================================================
 # Legacy Redirect for /live → latest auto-versioned endpoint
