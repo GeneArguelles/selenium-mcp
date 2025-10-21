@@ -100,59 +100,55 @@ def root_schema():
 
 
 # ==========================================================
-# Versioned /live endpoint (final spec-compliant MCP)
+# Versioned /live endpoint (OpenAI MCP Spec 2025-10-20)
 # ==========================================================
 @app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 async def versioned_live_manifest():
-    """Final OpenAI MCP-compliant manifest for Agent Builder."""
+    """Final MCP manifest that Agent Builder recognizes."""
     from fastapi.responses import JSONResponse
+    import platform
 
-    try:
-        print("[INFO] Served /v20251020/live unified schema (final strict MCP)")
+    print("[INFO] Served /v20251020/live unified schema (OpenAI MCP spec 2025-10-20)")
 
-        manifest = {
-            "model_context_protocol": "2025-10-20",
-            "type": "mcp_server",
-            "server_info": {
-                "name": "Selenium",
-                "description": "MCP server providing headless browser automation via Selenium.",
-                "version": "1.0.0",
-                "runtime": platform.python_version()
-            },
-            "capabilities": {
-                "invocation": True,
-                "streaming": False,
-                "multi_tool": False
-            },
-            "tools": [
-                {
-                    "name": "selenium_open_page",
-                    "description": "Open a URL in a headless Chrome browser and return the page title.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string"}
-                        },
-                        "required": ["url"]
-                    }
+    manifest = {
+        "model_context_protocol": "2025-10-20",
+        "version": "1.0.0",
+        "type": "mcp_server",
+        "server_info": {
+            "name": "Selenium",
+            "description": "MCP server providing headless browser automation via Selenium.",
+            "version": "1.0.0",
+            "runtime": platform.python_version()
+        },
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False
+        },
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"]
                 }
-            ]
-        }
+            }
+        ]
+    }
 
-        response = JSONResponse(
-            content=manifest,
-            media_type="application/json; charset=utf-8",
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            },
-        )
-        return response
-
-    except Exception as e:
-        print(f"[ERROR] /v20251020/live failed: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+    return JSONResponse(
+        content=manifest,
+        media_type="application/json; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 # ==========================================================
