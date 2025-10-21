@@ -251,13 +251,13 @@ def serve_live_direct(request: Request):
 
 
 # ==========================================================
-# Versioned /live endpoint (strict MCP, GET + POST compliant)
+# Versioned /live endpoint (strict MCP, supports GET + POST)
 # ==========================================================
 @app.api_route(f"/{MCP_VERSION}/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def versioned_live(request: Request):
+async def versioned_live(request: Request):
     """
     Serves the versioned MCP manifest for OpenAI Agent Builder.
-    Accepts GET and POST to satisfy validation and tooling checks.
+    Accepts both GET and POST requests (405-proof).
     """
     print(f"[INFO] Served versioned endpoint: /{MCP_VERSION}/live")
 
@@ -288,11 +288,13 @@ def versioned_live(request: Request):
         ],
     }
 
-    # Return JSON response with strict no-cache headers
+    # Return as strict JSON (no caching)
     response = JSONResponse(content=manifest)
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
+    response.headers.update({
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+    })
     return response
 
 
