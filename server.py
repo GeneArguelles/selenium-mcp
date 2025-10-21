@@ -198,7 +198,6 @@ def root_schema():
 # ==========================================================
 # Dynamic Version Incrementer for MCP Schema Endpoint
 # ==========================================================
-import os
 import string
 from datetime import datetime
 
@@ -232,6 +231,26 @@ print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 
 
 # ==========================================================
+# Direct /live endpoint — serves current MCP manifest (no redirect)
+# ==========================================================
+@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def serve_live_direct(request: Request):
+    """
+    Serves the same MCP manifest as the latest versioned endpoint.
+    Avoids 307 redirects so automated validators and Agent Builder
+    see a 200 OK with JSON immediately.
+    """
+    print(f"[INFO] Served direct /live (mapped to {MCP_VERSION})")
+
+    schema = unified_manifest() if "unified_manifest" in globals() else build_agentbuilder_schema()
+    response = JSONResponse(content=schema)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
+# ==========================================================
 # Versioned /live endpoint (strict MCP, dynamic auto-version)
 # ==========================================================
 @app.on_event("startup")
@@ -258,16 +277,6 @@ def register_dynamic_live_endpoint():
 
     print(f"[INFO] MCP dynamic path registered: {live_path}")
 
-
-# ==========================================================
-# Legacy Redirect for /live → latest auto-versioned endpoint
-# ==========================================================
-from fastapi.responses import RedirectResponse
-@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def redirect_live_to_dynamic():
-    """Redirect old /live calls to the newest versioned MCP path."""
-    print(f"[INFO] Redirected /live → {MCP_VERSIONED_PATH}")
-    return RedirectResponse(url=f"/{MCP_VERSION}/live", status_code=307)
 
 # ==========================================================
 # /mcp/schema — Strict schema endpoint for validators
