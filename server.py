@@ -14,7 +14,7 @@ import platform
 import hashlib
 import requests
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
