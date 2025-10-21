@@ -313,21 +313,37 @@ def health_check():
         "chrome_path": CHROME_BINARY,
     }
 
+
 # ==========================================================
-# /mcp/invoke — Tool execution
+# /mcp/invoke — Tool execution (GET + POST unified)
 # ==========================================================
 class InvokeRequest(BaseModel):
     tool: str
-    arguments: dict
+    arguments: dict | None = None
 
-@app.post("/mcp/invoke")
-def invoke_tool(req: InvokeRequest):
+
+@app.api_route("/mcp/invoke", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def invoke_tool(req: InvokeRequest | None = None):
+    """
+    Unified MCP invoke endpoint:
+    - GET  → used by validators or Render probes (returns a ready message)
+    - POST → actual tool invocation (standard MCP call)
+    """
+    if req is None:
+        print("[INFO] /mcp/invoke validation GET call — endpoint reachable.")
+        return JSONResponse(
+            content={"status": "ready", "message": "MCP invoke endpoint alive."},
+            status_code=200,
+        )
+
     print(f"[INFO] Invoked tool: {req.tool}")
+
     if req.tool == "selenium_open_page":
-        url = req.arguments.get("url")
+        url = (req.arguments or {}).get("url")
         if not url:
             return JSONResponse(
-                content={"error": "Missing 'url' argument."}, status_code=400
+                content={"error": "Missing 'url' argument."},
+                status_code=400,
             )
 
         chrome_opts = Options()
@@ -341,11 +357,18 @@ def invoke_tool(req: InvokeRequest):
             with webdriver.Chrome(options=chrome_opts) as driver:
                 driver.get(url)
                 title = driver.title
-            return {"result": f"Opened {url}", "title": title}
+            return JSONResponse(
+                content={"result": f"Opened {url}", "title": title},
+                status_code=200,
+            )
         except Exception as e:
             return JSONResponse(content={"error": str(e)}, status_code=500)
-    else:
-        return JSONResponse(content={"error": f"Unknown tool: {req.tool}"}, status_code=400)
+
+    return JSONResponse(
+        content={"error": f"Unknown tool: {req.tool}"},
+        status_code=400,
+    )
+
 
 # ==========================================================
 # Diagnostics
