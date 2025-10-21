@@ -100,44 +100,43 @@ def root_schema():
 
 
 # ==========================================================
-# Versioned /live endpoint (strict MCP for Agent Builder)
+# Versioned /live endpoint (final spec-compliant MCP)
 # ==========================================================
 @app.api_route("/v20251020/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 async def versioned_live_manifest():
-    """
-    Strict MCP manifest for OpenAI Agent Builder.
-    """
+    """Final OpenAI MCP-compliant manifest for Agent Builder."""
     from fastapi.responses import JSONResponse
 
     try:
-        print("[INFO] Served /v20251020/live unified schema (strict MCP)")
+        print("[INFO] Served /v20251020/live unified schema (final strict MCP)")
 
         manifest = {
-            "version": "2025-10-20",
-            "mcp_server": {
+            "model_context_protocol": "2025-10-20",
+            "type": "mcp_server",
+            "server_info": {
                 "name": "Selenium",
                 "description": "MCP server providing headless browser automation via Selenium.",
                 "version": "1.0.0",
-                "runtime": platform.python_version(),
-                "capabilities": {
-                    "invocation": True,
-                    "streaming": False,
-                    "multi_tool": False
-                },
-                "tools": [
-                    {
-                        "name": "selenium_open_page",
-                        "description": "Open a URL in a headless Chrome browser and return the page title.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "url": {"type": "string"}
-                            },
-                            "required": ["url"]
-                        }
+                "runtime": platform.python_version()
+            },
+            "capabilities": {
+                "invocation": True,
+                "streaming": False,
+                "multi_tool": False
+            },
+            "tools": [
+                {
+                    "name": "selenium_open_page",
+                    "description": "Open a URL in a headless Chrome browser and return the page title.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {"type": "string"}
+                        },
+                        "required": ["url"]
                     }
-                ]
-            }
+                }
+            ]
         }
 
         response = JSONResponse(
@@ -161,6 +160,7 @@ async def versioned_live_manifest():
 # ==========================================================
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 async def redirect_live_to_versioned():
+    """Redirect old /live calls to the versioned endpoint."""
     from fastapi.responses import RedirectResponse
     print("[INFO] Redirected /live → /v20251020/live")
     return RedirectResponse(url="/v20251020/live", status_code=307)
