@@ -359,20 +359,61 @@ def serve_schema(request: Request):
 
 
 # ==========================================================
-# /live → Wrapped schema version (compatibility mode)
+# /live → Canonical Agent Builder schema (2025-10-01 spec)
 # ==========================================================
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_latest_live(request: Request):
-    """Serve wrapped manifest structure for Agent Builder variants."""
-    print(f"[INFO] Served /live (wrapped schema, linked to {MCP_VERSION})")
-    manifest = build_schema_response().body  # get raw bytes of JSONResponse
+    """Serve canonical Agent Builder MCP schema format (nested under 'mcp')."""
     import json
-    parsed = json.loads(manifest)
-    wrapped = {
-        "type": "mcp_server",
-        "manifest": parsed
+    print(f"[INFO] Served canonical /live schema for Agent Builder ({MCP_VERSION})")
+
+    schema = {
+        "version": "2025-10-01",
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless browser",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"]
+                }
+            },
+            {
+                "name": "selenium_click",
+                "description": "Click an element by CSS selector",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"selector": {"type": "string"}},
+                    "required": ["selector"]
+                }
+            },
+            {
+                "name": "selenium_text",
+                "description": "Get text content by CSS selector",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"selector": {"type": "string"}},
+                    "required": ["selector"]
+                }
+            },
+            {
+                "name": "selenium_screenshot",
+                "description": "Save a PNG screenshot to /tmp and return its path",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"filename": {"type": "string"}},
+                    "required": ["filename"]
+                }
+            }
+        ]
     }
-    return JSONResponse(content=wrapped)
+
+    wrapped = {"mcp": schema}
+    return JSONResponse(content=wrapped, headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache"
+    })
 
 
 # ==========================================================
