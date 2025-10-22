@@ -359,15 +359,22 @@ def serve_schema(request: Request):
 
 
 # ==========================================================
-# /live → Flat schema for OpenAI Agent Builder
+# Canonical /live Schema for OpenAI Agent Builder
 # ==========================================================
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def serve_agentbuilder_flat(request: Request):
-    """Serve minimal flat schema so Agent Builder can detect tools directly."""
-    print(f"[INFO] Served flat /live schema (Builder mode, {MCP_VERSION})")
+def serve_canonical_live(request: Request):
+    """Single unified schema endpoint for Agent Builder detection."""
+    print(f"[INFO] Served canonical /live schema (Builder mode, {MCP_VERSION})")
 
     schema = {
+        "type": "mcp_server",
         "version": "2025-10-01",
+        "server_info": {
+            "name": "Selenium MCP",
+            "description": "Headless browser automation tools via Selenium for Agent Builder.",
+            "version": MCP_VERSION,
+            "runtime": platform.python_version()
+        },
         "tools": [
             {
                 "name": "selenium_open_page",
@@ -408,58 +415,14 @@ def serve_agentbuilder_flat(request: Request):
         ]
     }
 
-    return JSONResponse(content=schema, headers={
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Pragma": "no-cache"
-    })
-
-
-# ==========================================================
-# Versioned /live endpoint (strict MCP, supports GET + POST)
-# ==========================================================
-@app.api_route(f"/{MCP_VERSION}/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def versioned_live(request: Request):
-    """
-    Serves the versioned MCP manifest for OpenAI Agent Builder.
-    Accepts both GET and POST requests (405-proof).
-    """
-    print(f"[INFO] Served versioned endpoint: /{MCP_VERSION}/live")
-
-    manifest = {
-        "type": "mcp_server",
-        "version": MCP_VERSION,
-        "server_info": {
-            "name": SERVER_NAME,
-            "description": SERVER_DESC,
-            "version": "1.0.0",
-            "runtime": platform.python_version(),
-        },
-        "capabilities": {
-            "invocation": True,
-            "streaming": False,
-            "multi_tool": False,
-        },
-        "tools": [
-            {
-                "name": "selenium_open_page",
-                "description": "Open a URL in a headless Chrome browser and return the page title.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
-                },
-            },
-        ],
-    }
-
-    # Return as strict JSON (no caching)
-    response = JSONResponse(content=manifest)
-    response.headers.update({
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Pragma": "no-cache",
-        "Expires": "0"
-    })
-    return response
+    return JSONResponse(
+        content=schema,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Content-Type": "application/json; charset=utf-8"
+        }
+    )
 
 
 # ==========================================================
