@@ -240,14 +240,13 @@ print(f"[INFO] Chrome binary resolved as: {CHROME_BINARY}")
 
 
 # ==========================================================
-# Unified Schema Builder (used by /, /live, /mcp/schema)
+# Build unified schema manifest for Agent Builder (latest spec)
 # ==========================================================
 def build_agentbuilder_schema():
-    """Unified MCP-compatible schema for Agent Builder and validators."""
-    return {
-        "version": "2025-10-02",
-	"mcp_version": "2025-10-20",
+    """Return a unified schema compatible with OpenAI Agent Builder"""
+    manifest = {
         "type": "mcp_server",
+        "version": MCP_VERSION,
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -270,6 +269,13 @@ def build_agentbuilder_schema():
                 },
             }
         ],
+    }
+
+    # ✅ Unified wrapper for OpenAI Agent Builder compatibility (Oct 2025+)
+    return {
+        "version": MCP_VERSION,
+        "mcp_version": MCP_VERSION,
+        "manifest": manifest,  # <— tools now live under this key
     }
 
 
@@ -319,18 +325,18 @@ print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 
 
 # ==========================================================
-# Direct /live endpoint — serves current MCP manifest (no redirect)
+# /live → Always serves the latest MCP manifest version
 # ==========================================================
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def serve_live_direct(request: Request):
+def serve_latest_live(request: Request):
     """
-    Serves the same MCP manifest as the latest versioned endpoint.
-    Avoids 307 redirects so automated validators and Agent Builder
-    see a 200 OK with JSON immediately.
+    Auto-sync /live endpoint with the current MCP_VERSION.
+    Prevents stale cache mismatches between versioned URLs.
     """
-    print(f"[INFO] Served direct /live (mapped to {MCP_VERSION})")
-
-    schema = unified_manifest() if "unified_manifest" in globals() else build_agentbuilder_schema()
+    print(f"[INFO] Served /live (linked to {MCP_VERSION})")
+    schema = build_agentbuilder_schema()
+    schema["version"] = MCP_VERSION
+    schema["mcp_version"] = MCP_VERSION
     response = JSONResponse(content=schema)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
