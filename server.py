@@ -325,23 +325,55 @@ print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 
 
 # ==========================================================
+# Unified schema builder for /live and /mcp/schema endpoints
+# ==========================================================
+
+def build_schema_response() -> JSONResponse:
+    """
+    Centralized schema builder and response constructor.
+    Ensures all schema endpoints share consistent payloads,
+    headers, and version metadata for Agent Builder discovery.
+    """
+    schema = build_agentbuilder_schema()
+
+    # Inject MCP version metadata if available
+    schema["version"] = MCP_VERSION
+    schema["mcp_version"] = MCP_VERSION
+
+    response = JSONResponse(content=schema)
+    response.headers["Content-Type"] = "application/json"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+    return response
+
+
+# ==========================================================
 # /live → Always serves the latest MCP manifest version
 # ==========================================================
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def serve_latest_live(request: Request):
+async def serve_live_schema(request: Request):
     """
     Auto-sync /live endpoint with the current MCP_VERSION.
     Prevents stale cache mismatches between versioned URLs.
     """
     print(f"[INFO] Served /live (linked to {MCP_VERSION})")
-    schema = build_agentbuilder_schema()
-    schema["version"] = MCP_VERSION
-    schema["mcp_version"] = MCP_VERSION
-    response = JSONResponse(content=schema)
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    return response
+    return build_schema_response()
+
+
+# ==========================================================
+# /mcp/schema → Canonical MCP schema endpoint for Agent Builder
+# ==========================================================
+@app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def serve_mcp_schema(request: Request):
+    """
+    Serve identical schema payload used by /live.
+    Enables compatibility with OpenAI Agent Builder's
+    automatic MCP schema validation handshake.
+    """
+    print(f"[INFO] Served unified /mcp/schema (linked to {MCP_VERSION})")
+    return build_schema_response()
 
 
 # ==========================================================
