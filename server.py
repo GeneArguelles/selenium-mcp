@@ -327,19 +327,35 @@ print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 # ==========================================================
 # Unified schema builder for /live and /mcp/schema endpoints
 # ==========================================================
-
 def build_schema_response() -> JSONResponse:
     """
     Centralized schema builder and response constructor.
     Ensures all schema endpoints share consistent payloads,
     headers, and version metadata for Agent Builder discovery.
+
+    OpenAI Agent Builder expects the manifest to be nested
+    under a top-level "manifest" key, following MCP spec shape:
+    {
+        "type": "mcp_server",
+        "version": "...",
+        "manifest": { ... }  <-- contains tools, server_info, etc.
+    }
     """
-    schema = build_agentbuilder_schema()
+    # Build the core schema payload (with tools, info, etc.)
+    manifest = build_agentbuilder_schema()
+    
+    # Inject MCP version metadata into manifest
+    manifest["version"] = MCP_VERSION
+    manifest["mcp_version"] = MCP_VERSION
 
-    # Inject MCP version metadata if available
-    schema["version"] = MCP_VERSION
-    schema["mcp_version"] = MCP_VERSION
+    # Wrap it into the structure Agent Builder expects
+    schema = {
+        "type": "mcp_server",
+        "version": MCP_VERSION,
+        "manifest": manifest,
+    }
 
+    # Construct unified JSON response
     response = JSONResponse(content=schema)
     response.headers["Content-Type"] = "application/json"
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
@@ -350,29 +366,22 @@ def build_schema_response() -> JSONResponse:
 
 
 # ==========================================================
-# /live → Always serves the latest MCP manifest version
+# /mcp/schema → Primary Agent Builder manifest endpoint
 # ==========================================================
-@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def serve_live_schema(request: Request):
-    """
-    Auto-sync /live endpoint with the current MCP_VERSION.
-    Prevents stale cache mismatches between versioned URLs.
-    """
-    print(f"[INFO] Served /live (linked to {MCP_VERSION})")
+@app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def serve_schema(request: Request):
+    """Serve unified schema structure for OpenAI Agent Builder."""
+    print(f"[INFO] Served unified /mcp/schema (linked to {MCP_VERSION})")
     return build_schema_response()
 
 
 # ==========================================================
-# /mcp/schema → Canonical MCP schema endpoint for Agent Builder
+# /live → Always serve the latest MCP manifest version
 # ==========================================================
-@app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def serve_mcp_schema(request: Request):
-    """
-    Serve identical schema payload used by /live.
-    Enables compatibility with OpenAI Agent Builder's
-    automatic MCP schema validation handshake.
-    """
-    print(f"[INFO] Served unified /mcp/schema (linked to {MCP_VERSION})")
+@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def serve_latest_live(request: Request):
+    """Always serve latest MCP manifest with no-cache headers."""
+    print(f"[INFO] Served /live (linked to {MCP_VERSION})")
     return build_schema_response()
 
 
@@ -422,16 +431,6 @@ async def versioned_live(request: Request):
         "Expires": "0"
     })
     return response
-
-
-# ==========================================================
-# /mcp/schema — Strict schema endpoint for validators
-# ==========================================================
-@app.api_route("/mcp/schema", methods=["GET", "POST", "OPTIONS"])
-def schema_endpoint():
-    print("[INFO] Served /mcp/schema")
-    schema = build_agentbuilder_schema()
-    return JSONResponse(content=schema)
 
 
 # ==========================================================
