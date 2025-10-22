@@ -20,7 +20,7 @@ echo "=========================================================="
 echo "[DEPLOY] Pushing latest commit to Render..."
 echo "=========================================================="
 git add . && git commit -m "Auto deploy $(date +%F_%T)" || true
-git push render main
+git push origin main
 
 echo "Waiting 30s for build + container to start..."
 sleep 30
