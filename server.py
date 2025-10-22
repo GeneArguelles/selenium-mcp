@@ -329,39 +329,24 @@ print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
 # ==========================================================
 def build_schema_response() -> JSONResponse:
     """
-    Centralized schema builder and response constructor.
-    Ensures all schema endpoints share consistent payloads,
-    headers, and version metadata for Agent Builder discovery.
-
-    OpenAI Agent Builder expects the manifest to be nested
-    under a top-level "manifest" key, following MCP spec shape:
-    {
-        "type": "mcp_server",
-        "version": "...",
-        "manifest": { ... }  <-- contains tools, server_info, etc.
-    }
+    Returns a single-layer MCP manifest structure compatible with
+    OpenAI Agent Builder. Ensures consistent version metadata and
+    cache-control headers.
     """
-    # Build the core schema payload (with tools, info, etc.)
     manifest = build_agentbuilder_schema()
-    
-    # Inject MCP version metadata into manifest
+
+    # Inject version metadata directly into manifest
     manifest["version"] = MCP_VERSION
     manifest["mcp_version"] = MCP_VERSION
 
-    # Wrap it into the structure Agent Builder expects
-    schema = {
-        "type": "mcp_server",
-        "version": MCP_VERSION,
-        "manifest": manifest,
-    }
+    # Wrap once under 'manifest' (no extra nesting)
+    payload = {"manifest": manifest}
 
-    # Construct unified JSON response
-    response = JSONResponse(content=schema)
+    response = JSONResponse(content=payload)
     response.headers["Content-Type"] = "application/json"
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-
     return response
 
 
