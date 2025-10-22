@@ -240,40 +240,6 @@ print(f"[INFO] Chrome binary resolved as: {CHROME_BINARY}")
 
 
 # ==========================================================
-# Build unified schema manifest for Agent Builder (latest spec)
-# ==========================================================
-def build_agentbuilder_schema():
-    """Return a unified, flat schema compatible with OpenAI Agent Builder"""
-    return {
-        "type": "mcp_server",
-        "version": MCP_VERSION,
-        "mcp_version": MCP_VERSION,
-        "server_info": {
-            "name": SERVER_NAME,
-            "description": SERVER_DESC,
-            "version": "1.0.0",
-            "runtime": platform.python_version(),
-        },
-        "capabilities": {
-            "invocation": True,
-            "streaming": False,
-            "multi_tool": False,
-        },
-        "tools": [
-            {
-                "name": "selenium_open_page",
-                "description": "Open a URL in a headless Chrome browser and return the page title.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
-                },
-            }
-        ],
-    }
-
-
-# ==========================================================
 # Root Schema (Agent Builder entry)
 # ==========================================================
 @app.api_route("/", methods=["GET", "POST", "HEAD", "OPTIONS"])
@@ -316,6 +282,46 @@ def get_next_suffix():
 MCP_SUFFIX = get_next_suffix()
 MCP_VERSIONED_PATH = f"/{BASE_VERSION}{MCP_SUFFIX}/live"
 print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
+
+
+# ==========================================================
+# Build flat MCP manifest — OpenAI Agent Builder compatible
+# ==========================================================
+def build_agentbuilder_schema():
+    """
+    Return a flat, unified MCP manifest compatible with
+    OpenAI Agent Builder. This schema ensures that `tools`
+    appear at the top level (not nested under 'manifest').
+    """
+    return {
+        "type": "mcp_server",
+        "version": MCP_VERSION,
+        "mcp_version": MCP_VERSION,
+        "server_info": {
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": "1.0.0",
+            "runtime": platform.python_version(),
+        },
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False,
+        },
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string"}
+                    },
+                    "required": ["url"],
+                },
+            }
+        ],
+    }
 
 
 # ==========================================================
