@@ -359,13 +359,20 @@ def serve_schema(request: Request):
 
 
 # ==========================================================
-# /live → Always serve the latest MCP manifest version
+# /live → Wrapped schema version (compatibility mode)
 # ==========================================================
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_latest_live(request: Request):
-    """Always serve latest MCP manifest with no-cache headers."""
-    print(f"[INFO] Served /live (linked to {MCP_VERSION})")
-    return build_schema_response()
+    """Serve wrapped manifest structure for Agent Builder variants."""
+    print(f"[INFO] Served /live (wrapped schema, linked to {MCP_VERSION})")
+    manifest = build_schema_response().body  # get raw bytes of JSONResponse
+    import json
+    parsed = json.loads(manifest)
+    wrapped = {
+        "type": "mcp_server",
+        "manifest": parsed
+    }
+    return JSONResponse(content=wrapped)
 
 
 # ==========================================================
