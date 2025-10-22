@@ -243,10 +243,11 @@ print(f"[INFO] Chrome binary resolved as: {CHROME_BINARY}")
 # Build unified schema manifest for Agent Builder (latest spec)
 # ==========================================================
 def build_agentbuilder_schema():
-    """Return a unified schema compatible with OpenAI Agent Builder"""
-    manifest = {
+    """Return a unified, flat schema compatible with OpenAI Agent Builder"""
+    return {
         "type": "mcp_server",
         "version": MCP_VERSION,
+        "mcp_version": MCP_VERSION,
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -269,13 +270,6 @@ def build_agentbuilder_schema():
                 },
             }
         ],
-    }
-
-    # ✅ Unified wrapper for OpenAI Agent Builder compatibility (Oct 2025+)
-    return {
-        "version": MCP_VERSION,
-        "mcp_version": MCP_VERSION,
-        "manifest": manifest,  # <— tools now live under this key
     }
 
 
