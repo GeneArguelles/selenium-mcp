@@ -359,66 +359,56 @@ def serve_schema(request: Request):
 
 
 # ==========================================================
-# /live → Dual-compatible MCP schema (Builder + MCP spec)
+# /live → Flat schema for OpenAI Agent Builder
 # ==========================================================
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def serve_latest_live(request: Request):
-    """Serve hybrid schema structure compatible with all Agent Builder variants."""
-    print(f"[INFO] Served dual-compatible /live schema ({MCP_VERSION})")
+def serve_agentbuilder_flat(request: Request):
+    """Serve minimal flat schema so Agent Builder can detect tools directly."""
+    print(f"[INFO] Served flat /live schema (Builder mode, {MCP_VERSION})")
 
-    tools = [
-        {
-            "name": "selenium_open_page",
-            "description": "Open a URL in a headless browser and return the page title.",
-            "parameters": {
-                "type": "object",
-                "properties": {"url": {"type": "string"}},
-                "required": ["url"]
-            }
-        },
-        {
-            "name": "selenium_click",
-            "description": "Click an element by CSS selector.",
-            "parameters": {
-                "type": "object",
-                "properties": {"selector": {"type": "string"}},
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "selenium_text",
-            "description": "Get text content by CSS selector.",
-            "parameters": {
-                "type": "object",
-                "properties": {"selector": {"type": "string"}},
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "selenium_screenshot",
-            "description": "Save a PNG screenshot to /tmp and return its path.",
-            "parameters": {
-                "type": "object",
-                "properties": {"filename": {"type": "string"}},
-                "required": ["filename"]
-            }
-        }
-    ]
-
-    canonical = {
+    schema = {
         "version": "2025-10-01",
-        "tools": tools
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"]
+                }
+            },
+            {
+                "name": "selenium_click",
+                "description": "Click an element by CSS selector.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"selector": {"type": "string"}},
+                    "required": ["selector"]
+                }
+            },
+            {
+                "name": "selenium_text",
+                "description": "Get text content by CSS selector.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"selector": {"type": "string"}},
+                    "required": ["selector"]
+                }
+            },
+            {
+                "name": "selenium_screenshot",
+                "description": "Save a PNG screenshot to /tmp and return its path.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"filename": {"type": "string"}},
+                    "required": ["filename"]
+                }
+            }
+        ]
     }
 
-    # Dual-compatible wrapper
-    hybrid = {
-        "version": MCP_VERSION,
-        "mcp_version": MCP_VERSION,
-        "mcp": canonical,
-        "tools": tools
-    }
-
-    return JSONResponse(content=hybrid, headers={
+    return JSONResponse(content=schema, headers={
         "Cache-Control": "no-store, no-cache, must-revalidate",
         "Pragma": "no-cache"
     })
