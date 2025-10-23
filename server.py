@@ -348,22 +348,25 @@ last_switch_time = None
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_adaptive_live(request: Request):
     """
-    OpenAI Agent Builder sometimes ignores 'tools' at the top level if
-    'type': 'mcp_server' appears first. This version prioritizes a flat
-    'manifest' wrapper for Builder discovery, and only falls back to
-    strict MCP spec if needed.
+    Canonical adaptive /live route for OpenAI Agent Builder.
+    Chooses strict or flat format automatically, remembers last success.
     """
 
-    # ✅ Declare globals *before* first reference
+    # ✅ Must declare globals before *any* use or assignment
     global last_success_mode, last_switch_time
     import time
 
-    user_agent = request.headers.get("User-Agent", "unknown")
-    requested_mode = "auto"
-    effective_mode = "flat" if last_success_mode == "flat" else "strict"
+    # --- Capture context and determine mode ---
+    client_ua = request.headers.get("User-Agent", "unknown")
+    requested_mode = request.query_params.get("mode", "").lower()
 
-    print(f"[INFO] /live hit by {user_agent}")
-    print(f"[INFO] Requested mode=({requested_mode}) | Using effective_mode={effective_mode}")
+    effective_mode = (
+        requested_mode if requested_mode in ["strict", "flat"] else last_success_mode
+    )
+
+    print(f"\n[INFO] /live hit by {client_ua}")
+    print(f"[INFO] Requested mode=({requested_mode or 'auto'}) | Using effective_mode={effective_mode}")
+    print(f"[INFO] Last successful mode={last_success_mode}\n")
 
     # Strict schema (for reference)
     strict_schema = {
