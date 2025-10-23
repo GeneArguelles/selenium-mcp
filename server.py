@@ -355,6 +355,8 @@ def serve_adaptive_live(request: Request):
     """
     import time
 
+    global last_success_mode, last_switch_time
+
     user_agent = request.headers.get("User-Agent", "unknown")
     requested_mode = "auto"
     effective_mode = "flat" if last_success_mode == "flat" else "strict"
