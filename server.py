@@ -531,6 +531,16 @@ def serve_adaptive_live(request: Request):
 
 
 # ==========================================================
+# Versioned schema alias for OpenAI Agent Builder (e.g. /v20251023f/mcp/schema)
+# ==========================================================
+@app.api_route(f"/{MCP_VERSION}/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def serve_versioned_schema(request: Request):
+    """Serve schema for versioned path to ensure compatibility with /v*/live."""
+    print(f"[INFO] Served versioned /{MCP_VERSION}/mcp/schema (linked to canonical /mcp/schema)")
+    return build_schema_response()
+
+
+# ==========================================================
 # Catch-all versioned /live routes for backward compatibility
 # ==========================================================
 @app.api_route("/{version}/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
