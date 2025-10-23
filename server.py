@@ -353,9 +353,10 @@ def serve_adaptive_live(request: Request):
     'manifest' wrapper for Builder discovery, and only falls back to
     strict MCP spec if needed.
     """
-    import time
 
+    # ✅ Declare globals *before* first reference
     global last_success_mode, last_switch_time
+    import time
 
     user_agent = request.headers.get("User-Agent", "unknown")
     requested_mode = "auto"
