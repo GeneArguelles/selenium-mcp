@@ -250,41 +250,6 @@ def root_schema():
 
 
 # ==========================================================
-# Dynamic Version Incrementer for MCP Schema Endpoint
-# ==========================================================
-import string
-from datetime import datetime
-
-BASE_VERSION = "v20251020"
-SUFFIX_FILE = "/tmp/mcp_version_suffix.txt"
-
-def get_next_suffix():
-    """Retrieve and increment the MCP suffix stored in SUFFIX_FILE."""
-    try:
-        with open(SUFFIX_FILE, "r") as f:
-            current = f.read().strip()
-    except FileNotFoundError:
-        current = "a"
-
-    # Increment alphabetical suffix
-    if current and current[-1].isalpha():
-        if current[-1] == "z":
-            new = current + "a"
-        else:
-            new = current[:-1] + chr(ord(current[-1]) + 1)
-    else:
-        new = "a"
-
-    with open(SUFFIX_FILE, "w") as f:
-        f.write(new)
-    return new
-
-MCP_SUFFIX = get_next_suffix()
-MCP_VERSIONED_PATH = f"/{BASE_VERSION}{MCP_SUFFIX}/live"
-print(f"[INFO] MCP dynamic path registered: {MCP_VERSIONED_PATH}")
-
-
-# ==========================================================
 # Build flat MCP manifest — OpenAI Agent Builder compatible
 # ==========================================================
 def build_agentbuilder_schema():
@@ -423,6 +388,64 @@ def serve_canonical_live(request: Request):
             "Content-Type": "application/json; charset=utf-8"
         }
     )
+
+
+# ==========================================================
+# Catch-all versioned /live routes for backward compatibility
+# ==========================================================
+@app.api_route("/{version}/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def serve_versioned_live(request: Request, version: str):
+    """Redirects or mirrors canonical /live schema for older Builder calls."""
+    print(f"[INFO] Served versioned /{version}/live (alias to canonical /live)")
+    schema = {
+        "type": "mcp_server",
+        "version": MCP_VERSION,
+        "server_info": {
+            "name": "Selenium MCP",
+            "description": "Headless browser automation tools via Selenium for Agent Builder.",
+            "version": MCP_VERSION,
+            "runtime": platform.python_version()
+        },
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"url": {"type": "string"}},
+                    "required": ["url"]
+                }
+            },
+            {
+                "name": "selenium_click",
+                "description": "Click an element by CSS selector.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"selector": {"type": "string"}},
+                    "required": ["selector"]
+                }
+            },
+            {
+                "name": "selenium_text",
+                "description": "Get text content by CSS selector.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"selector": {"type": "string"}},
+                    "required": ["selector"]
+                }
+            },
+            {
+                "name": "selenium_screenshot",
+                "description": "Save a PNG screenshot to /tmp and return its path.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"filename": {"type": "string"}},
+                    "required": ["filename"]
+                }
+            }
+        ]
+    }
+    return JSONResponse(content=schema)
 
 
 # ==========================================================
