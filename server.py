@@ -400,20 +400,6 @@ def build_schema_response() -> JSONResponse:
 # ==========================================================
 # Root Route (Unified Manifest Proxy)
 # ==========================================================
-@app.get("/")
-def root_manifest():
-    """Serve a minimal MCP manifest for root requests."""
-    return {
-        "status": "ok",
-        "message": "Selenium MCP root endpoint. Use /mcp/schema or /live.",
-        "mcp_version": MCP_VERSION,
-        "tools_available": [tool["name"] for tool in MCP_TOOLS_LIST],
-    }
-
-
-# ==========================================================
-# Root Route (Unified Manifest Proxy)
-# ==========================================================
 from fastapi import Request  # make sure this is imported at the top of file
 
 @app.get("/")
