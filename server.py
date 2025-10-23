@@ -172,13 +172,6 @@ def serve_schema(request: Request):
         },
     )
 
-# ==========================================================
-# Versioned /v*/mcp/schema alias
-# ==========================================================
-@app.api_route(f"/{MCP_VERSION}/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def serve_versioned_schema(request: Request):
-    print(f"[INFO] Served versioned /{MCP_VERSION}/mcp/schema → canonical /mcp/schema")
-    return serve_schema(request)
 
 # ==========================================================
 # Canonical /live Schema
@@ -212,13 +205,53 @@ def serve_live(request: Request):
 
     return JSONResponse(content=schema)
 
+
 # ==========================================================
-# Versioned /v*/live alias
+# Version-Agnostic Aliases for /v*/mcp/schema and /v*/live
 # ==========================================================
-@app.api_route("/{version}/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def serve_versioned_live(request: Request, version: str):
-    print(f"[INFO] Served /{version}/live → canonical /live")
-    return serve_live(request)
+from fastapi import Path
+import re
+
+@app.api_route(
+    "/{version}/mcp/schema",
+    methods=["GET", "POST", "HEAD", "OPTIONS"],
+)
+def serve_dynamic_versioned_schema(request: Request, version: str = Path(...)):
+    """
+    Dynamically serve any /vYYYYMMDD[a-z]/mcp/schema path by
+    delegating to the canonical schema builder directly.
+    """
+    if re.match(r"^v\d{8}[a-z]?$", version):
+        print(f"[INFO] Served dynamic /{version}/mcp/schema → canonical builder")
+        schema_response = build_schema_response()   # ✅ Direct call
+        return schema_response
+    else:
+        print(f"[WARN] Invalid version pattern for schema route: {version}")
+        return JSONResponse(
+            content={"error": f"Invalid MCP version pattern: {version}"},
+            status_code=400
+        )
+
+
+@app.api_route(
+    "/{version}/live",
+    methods=["GET", "POST", "HEAD", "OPTIONS"],
+)
+def serve_dynamic_versioned_live(request: Request, version: str = Path(...)):
+    """
+    Dynamically serve any /vYYYYMMDD[a-z]/live path by
+    delegating to canonical /live.
+    """
+    if re.match(r"^v\d{8}[a-z]?$", version):
+        print(f"[INFO] Served dynamic /{version}/live → canonical /live")
+        return serve_live(request)
+    else:
+        print(f"[WARN] Invalid version pattern for live route: {version}")
+        return JSONResponse(
+            content={"error": f"Invalid MCP version pattern: {version}"},
+            status_code=400
+        )
+
 
 # ==========================================================
 # /mcp/invoke — Tool execution
