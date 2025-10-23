@@ -340,35 +340,35 @@ def serve_schema(request: Request):
 
 
 # ==========================================================
-# /live → Flat-first adaptive schema (Builder-preferred)
+# Canonical Adaptive /live Schema (Strict + Fallback modes)
 # ==========================================================
-last_success_mode = "flat"
+last_success_mode = "strict"
 last_switch_time = None
 
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_adaptive_live(request: Request):
     """
-    Canonical adaptive /live route for OpenAI Agent Builder.
-    Chooses strict or flat format automatically, remembers last success.
+    Adaptive /live endpoint that supports both strict MCP and fallback modes.
+    Remembers the last successful mode and automatically prefers it next time.
     """
 
-    # ✅ Must declare globals before *any* use or assignment
+    # ✅ Declare globals immediately
     global last_success_mode, last_switch_time
-    import time
 
-    # --- Capture context and determine mode ---
     client_ua = request.headers.get("User-Agent", "unknown")
     requested_mode = request.query_params.get("mode", "").lower()
 
-    effective_mode = (
-        requested_mode if requested_mode in ["strict", "flat"] else last_success_mode
-    )
+    # Determine effective mode
+    if requested_mode in ["strict", "fallback"]:
+        effective_mode = requested_mode
+    else:
+        effective_mode = last_success_mode or "strict"
 
     print(f"\n[INFO] /live hit by {client_ua}")
     print(f"[INFO] Requested mode=({requested_mode or 'auto'}) | Using effective_mode={effective_mode}")
     print(f"[INFO] Last successful mode={last_success_mode}\n")
 
-    # Strict schema (for reference)
+    # ---------- Strict MCP schema ----------
     strict_schema = {
         "type": "mcp_server",
         "mcp_version": MCP_VERSION,
@@ -376,81 +376,44 @@ def serve_adaptive_live(request: Request):
             "name": "Selenium MCP",
             "description": "Headless browser automation tools for OpenAI Agent Builder.",
             "version": MCP_VERSION,
-            "runtime": platform.python_version()
+            "runtime": platform.python_version(),
         },
         "capabilities": {"invocation": True},
-        "tools": [
-            {
-                "name": "selenium_open_page",
-                "description": "Open a URL in a headless Chrome browser and return the page title.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"url": {"type": "string"}},
-                    "required": ["url"]
-                }
-            },
-            {
-                "name": "selenium_click",
-                "description": "Click an element by CSS selector.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"selector": {"type": "string"}},
-                    "required": ["selector"]
-                }
-            },
-            {
-                "name": "selenium_text",
-                "description": "Get text content by CSS selector.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"selector": {"type": "string"}},
-                    "required": ["selector"]
-                }
-            },
-            {
-                "name": "selenium_screenshot",
-                "description": "Save a PNG screenshot to /tmp and return its path.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"filename": {"type": "string"}},
-                    "required": ["filename"]
-                }
-            }
-        ]
+        "tools": MCP_TOOLS_LIST
     }
 
-    # Flat wrapper schema (preferred for Builder)
-    flat_schema = {
-        "manifest": {
-            "version": MCP_VERSION,
-            "tools": strict_schema["tools"]
-        }
+    # ---------- Fallback schema ----------
+    fallback_schema = {
+        "version": MCP_VERSION,
+        "tools": MCP_TOOLS_LIST
     }
 
-    try:
-        if effective_mode == "flat":
-            response_data = flat_schema
-            print(f"[INFO] Served flat Builder manifest format ({MCP_VERSION}) ✅")
-        else:
-            response_data = strict_schema
-            print(f"[INFO] Served strict MCP schema format ({MCP_VERSION}) ⚙️")
+    # ---------- Hybrid wrapper ----------
+    hybrid_schema = {
+        "type": "mcp_server",
+        "manifest": strict_schema
+    }
 
-        global last_success_mode, last_switch_time
-        last_success_mode = effective_mode
-        last_switch_time = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    # ---------- Adaptive selection ----------
+    if effective_mode == "strict":
+        response_body = strict_schema
+    elif effective_mode == "fallback":
+        response_body = fallback_schema
+    else:
+        # automatic fallback to hybrid (if Builder compatibility issues)
+        response_body = hybrid_schema
+        effective_mode = "fallback"
 
-        return JSONResponse(
-            content=response_data,
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate",
-                "Pragma": "no-cache",
-                "Content-Type": "application/json; charset=utf-8"
-            }
-        )
+    # Update globals on success
+    last_success_mode = effective_mode
+    last_switch_time = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 
-    except Exception as e:
-        print(f"[ERROR] /live exception: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+    print(f"[INFO] Served {effective_mode.upper()} MCP schema format ({MCP_VERSION}) ✅")
+
+    return JSONResponse(content=response_body, headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache"
+    })
 
 
 # ==========================================================
