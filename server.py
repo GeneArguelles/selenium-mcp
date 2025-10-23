@@ -243,6 +243,50 @@ SERVER_NAME = "Selenium"
 SERVER_DESC = "MCP server providing headless browser automation via Selenium."
 APP_START_TIME = time.time()
 
+
+# ==========================================================
+# MCP Tool Definitions (shared across schema endpoints)
+# ==========================================================
+MCP_TOOLS_LIST = [
+    {
+        "name": "selenium_open_page",
+        "description": "Open a URL in a headless Chrome browser and return the page title.",
+        "parameters": {
+            "type": "object",
+            "properties": {"url": {"type": "string"}},
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "selenium_click",
+        "description": "Click an element by CSS selector.",
+        "parameters": {
+            "type": "object",
+            "properties": {"selector": {"type": "string"}},
+            "required": ["selector"],
+        },
+    },
+    {
+        "name": "selenium_text",
+        "description": "Get text content by CSS selector.",
+        "parameters": {
+            "type": "object",
+            "properties": {"selector": {"type": "string"}},
+            "required": ["selector"],
+        },
+    },
+    {
+        "name": "selenium_screenshot",
+        "description": "Save a PNG screenshot to /tmp and return its path.",
+        "parameters": {
+            "type": "object",
+            "properties": {"filename": {"type": "string"}},
+            "required": ["filename"],
+        },
+    },
+]
+
+
 # ==========================================================
 # Chrome Binary Resolver (Render vs Local)
 # ==========================================================
