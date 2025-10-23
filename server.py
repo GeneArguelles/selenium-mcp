@@ -20,6 +20,64 @@ import subprocess
 import requests
 from datetime import datetime
 
+# ==========================================================
+# Environment Variable Setup (Render + Local)
+# ==========================================================   
+RENDER_CHROME_PATH = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
+            
+SERVER_NAME = os.getenv("SERVER_NAME", "Selenium")
+SERVER_DESC = os.getenv("SERVER_DESC", "MCP server providing headless browser automation via Seleni$
+CHROME_BINARY = os.getenv("CHROME_BINARY", RENDER_CHROME_PATH)
+                
+# ==========================================================
+# Globals
+# ==========================================================
+SERVER_NAME = "Selenium"
+SERVER_DESC = "MCP server providing headless browser automation via Selenium."
+APP_START_TIME = time.time()
+
+# ==========================================================
+# MCP Tool Definitions (shared across schema endpoints)
+# ==========================================================   
+MCP_TOOLS_LIST = [
+    {
+        "name": "selenium_open_page",
+        "description": "Open a URL in a headless Chrome browser and return the page title.",
+        "parameters": {
+            "type": "object",
+            "properties": {"url": {"type": "string"}}, 
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "selenium_click",
+        "description": "Click an element by CSS selector.",
+        "parameters": {
+            "type": "object",
+            "properties": {"selector": {"type": "string"}},
+            "required": ["selector"],
+        },
+    },
+    {
+        "name": "selenium_text",
+        "description": "Get text content by CSS selector.",
+        "parameters": {
+            "type": "object",
+            "properties": {"selector": {"type": "string"}},
+            "required": ["selector"],
+        },
+    },  
+    {   
+        "name": "selenium_screenshot",
+        "description": "Save a PNG screenshot to /tmp and return its path.",
+        "parameters": {
+            "type": "object",
+            "properties": {"filename": {"type": "string"}},
+            "required": ["filename"],
+        },
+    },
+]
+            
 # ------------------------------
 # FastAPI & Dependencies
 # ------------------------------
@@ -225,66 +283,6 @@ async def announce_mcp_url():
           "-H 'Content-Type: application/json' "
           "-d '{\"tool\": \"selenium_open_page\", \"arguments\": {\"url\": \"https://example.com\"}}' | jq .")
     print("==========================================================\n")
-
-
-# ==========================================================
-# Environment Variable Setup (Render + Local)
-# ==========================================================
-RENDER_CHROME_PATH = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
-
-SERVER_NAME = os.getenv("SERVER_NAME", "Selenium")
-SERVER_DESC = os.getenv("SERVER_DESC", "MCP server providing headless browser automation via Selenium.")
-CHROME_BINARY = os.getenv("CHROME_BINARY", RENDER_CHROME_PATH)
-
-# ==========================================================
-# Globals
-# ==========================================================
-SERVER_NAME = "Selenium"
-SERVER_DESC = "MCP server providing headless browser automation via Selenium."
-APP_START_TIME = time.time()
-
-
-# ==========================================================
-# MCP Tool Definitions (shared across schema endpoints)
-# ==========================================================
-MCP_TOOLS_LIST = [
-    {
-        "name": "selenium_open_page",
-        "description": "Open a URL in a headless Chrome browser and return the page title.",
-        "parameters": {
-            "type": "object",
-            "properties": {"url": {"type": "string"}},
-            "required": ["url"],
-        },
-    },
-    {
-        "name": "selenium_click",
-        "description": "Click an element by CSS selector.",
-        "parameters": {
-            "type": "object",
-            "properties": {"selector": {"type": "string"}},
-            "required": ["selector"],
-        },
-    },
-    {
-        "name": "selenium_text",
-        "description": "Get text content by CSS selector.",
-        "parameters": {
-            "type": "object",
-            "properties": {"selector": {"type": "string"}},
-            "required": ["selector"],
-        },
-    },
-    {
-        "name": "selenium_screenshot",
-        "description": "Save a PNG screenshot to /tmp and return its path.",
-        "parameters": {
-            "type": "object",
-            "properties": {"filename": {"type": "string"}},
-            "required": ["filename"],
-        },
-    },
-]
 
 
 # ==========================================================
