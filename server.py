@@ -412,6 +412,26 @@ def root_manifest():
 
 
 # ==========================================================
+# Root Route (Unified Manifest Proxy)
+# ==========================================================
+from fastapi import Request  # make sure this is imported at the top of file
+
+@app.get("/")
+def root_manifest(request: Request):
+    """Serve a minimal MCP manifest for root requests."""
+    return {
+        "status": "ok",
+        "message": "Selenium MCP root endpoint. Use /mcp/schema or /live.",
+        "mcp_version": MCP_VERSION,
+        "links": {
+            "schema": f"{request.base_url}mcp/schema",
+            "live": f"{request.base_url}live"
+        },
+        "tools_available": [tool["name"] for tool in MCP_TOOLS_LIST],
+    }
+
+
+# ==========================================================
 # /mcp/schema → Primary Agent Builder manifest endpoint
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
