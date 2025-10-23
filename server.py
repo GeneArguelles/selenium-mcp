@@ -298,6 +298,32 @@ print(f"[INFO] Chrome binary resolved as: {CHROME_BINARY}")
 
 
 # ==========================================================
+# Root Manifest Endpoint (MCP Discovery)
+# ==========================================================
+@app.get("/", response_class=JSONResponse)
+def root_manifest():
+    """
+    Root MCP discovery endpoint.
+    Provides minimal information linking to the live MCP schema.
+    """
+    response = {
+        "type": "mcp_server",
+        "mcp_version": MCP_VERSION,
+        "version": MCP_VERSION,
+        "server_info": {
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": MCP_VERSION
+        },
+        "endpoints": {
+            "live": f"{request.base_url}live",
+            "schema": f"{request.base_url}mcp/schema"
+        }
+    }
+    return JSONResponse(content=response, media_type="application/json")
+
+
+# ==========================================================
 # Root Schema (Agent Builder entry)
 # ==========================================================
 @app.api_route("/", methods=["GET", "POST", "HEAD", "OPTIONS"])
@@ -423,6 +449,9 @@ def serve_adaptive_live(request: Request):
         "capabilities": {"invocation": True},
         "tools": MCP_TOOLS_LIST
     }
+
+    # ✅ Add backward-compatible version key for Agent Builder parsing
+    strict_schema["version"] = strict_schema.get("mcp_version", MCP_VERSION)
 
     # ---------- Fallback schema ----------
     fallback_schema = {

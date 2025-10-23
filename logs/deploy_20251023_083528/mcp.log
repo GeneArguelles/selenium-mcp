@@ -56,3 +56,7 @@ INFO:     127.0.0.1:55344 - "GET /apple-touch-icon-precomposed.png HTTP/1.1" 405
 INFO:     127.0.0.1:55345 - "GET /apple-touch-icon.png HTTP/1.1" 405 Method Not Allowed
 INFO:     127.0.0.1:55346 - "GET /favicon.ico HTTP/1.1" 405 Method Not Allowed
 INFO:     127.0.0.1:55344 - "GET /apple-touch-icon.png HTTP/1.1" 405 Method Not Allowed
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [19842]
