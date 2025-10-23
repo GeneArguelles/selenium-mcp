@@ -26,7 +26,7 @@ from datetime import datetime
 RENDER_CHROME_PATH = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
             
 SERVER_NAME = os.getenv("SERVER_NAME", "Selenium")
-SERVER_DESC = os.getenv("SERVER_DESC", "MCP server providing headless browser automation via Seleni$
+SERVER_DESC = os.getenv("SERVER_DESC", "MCP server providing headless browser automation via Selenium.")
 CHROME_BINARY = os.getenv("CHROME_BINARY", RENDER_CHROME_PATH)
                 
 # ==========================================================
