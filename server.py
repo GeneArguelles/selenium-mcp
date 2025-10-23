@@ -7,21 +7,37 @@
 # ==========================================================
 
 # ------------------------------
-# Imports
+# Consolidated Imports
 # ------------------------------
 import os
 import re
 import time
+import json
+import string
 import platform
 import hashlib
+import subprocess
 import requests
 from datetime import datetime
+
+# ------------------------------
+# FastAPI & Dependencies
+# ------------------------------
 from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# ------------------------------
+# Selenium
+# ------------------------------
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+
+# ------------------------------
+# Boot Info Log
+# ------------------------------
+print(f"[BOOT] Starting {platform.python_implementation()} {platform.python_version()} with Selenium MCP Server")
 
 # ------------------------------
 # Server Metadata (must precede FastAPI init)
@@ -324,31 +340,54 @@ def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /live Schema for OpenAI Agent Builder
+# Canonical /live Schema (self-adaptive OpenAI Agent Builder format)
 # ==========================================================
-@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def serve_canonical_live(request: Request):
-    """Single unified schema endpoint for Agent Builder detection."""
-    print(f"[INFO] Served canonical /live schema (Builder mode, {MCP_VERSION})")
+# Global state variable to remember last success mode
+last_success_mode = "strict"
+last_switch_time = None
 
-    schema = {
+@app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def serve_adaptive_live(request: Request):
+    """
+    Serves the strict MCP manifest expected by OpenAI Agent Builder.
+    Automatically falls back to a flat legacy manifest if compatibility issues occur.
+    Remembers the last successfully served mode (strict vs fallback).
+    Supports manual override via ?mode=fallback or ?mode=strict query params.
+    """
+
+    global last_success_mode, last_switch_time
+
+    # Capture request context
+    client_ua = request.headers.get("User-Agent", "unknown")
+    mode = request.query_params.get("mode", "").lower()
+
+    # Determine effective mode
+    effective_mode = mode if mode in ["strict", "fallback"] else last_success_mode
+
+    print(f"\n[INFO] /live hit by {client_ua}")
+    print(f"[INFO] Requested mode={mode or '(auto)'} | Using effective_mode={effective_mode}")
+    print(f"[INFO] Last successful mode={last_success_mode}\n")
+
+    # ---------- Strict MCP schema ----------
+    strict_schema = {
         "type": "mcp_server",
-        "version": "2025-10-01",
+        "mcp_version": MCP_VERSION,
         "server_info": {
             "name": "Selenium MCP",
-            "description": "Headless browser automation tools via Selenium for Agent Builder.",
+            "description": "Headless browser automation tools for OpenAI Agent Builder.",
             "version": MCP_VERSION,
-            "runtime": platform.python_version()
+            "runtime": platform.python_version(),
         },
+        "capabilities": {"invocation": True},
         "tools": [
             {
                 "name": "selenium_open_page",
-                "description": "Open a URL in a headless browser and return the page title.",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
                 "parameters": {
                     "type": "object",
                     "properties": {"url": {"type": "string"}},
-                    "required": ["url"]
-                }
+                    "required": ["url"],
+                },
             },
             {
                 "name": "selenium_click",
@@ -356,8 +395,8 @@ def serve_canonical_live(request: Request):
                 "parameters": {
                     "type": "object",
                     "properties": {"selector": {"type": "string"}},
-                    "required": ["selector"]
-                }
+                    "required": ["selector"],
+                },
             },
             {
                 "name": "selenium_text",
@@ -365,8 +404,8 @@ def serve_canonical_live(request: Request):
                 "parameters": {
                     "type": "object",
                     "properties": {"selector": {"type": "string"}},
-                    "required": ["selector"]
-                }
+                    "required": ["selector"],
+                },
             },
             {
                 "name": "selenium_screenshot",
@@ -374,20 +413,54 @@ def serve_canonical_live(request: Request):
                 "parameters": {
                     "type": "object",
                     "properties": {"filename": {"type": "string"}},
-                    "required": ["filename"]
-                }
-            }
-        ]
+                    "required": ["filename"],
+                },
+            },
+        ],
     }
 
-    return JSONResponse(
-        content=schema,
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Pragma": "no-cache",
-            "Content-Type": "application/json; charset=utf-8"
-        }
-    )
+    # ---------- Fallback legacy schema ----------
+    fallback_schema = {
+        "version": "2025-10-01",
+        "tools": strict_schema["tools"],
+    }
+
+    try:
+        # Auto-detect legacy User-Agent or explicit fallback
+        if (
+            "Legacy-Agent" in client_ua
+            or "Compatibility" in client_ua
+            or effective_mode == "fallback"
+        ):
+            raise ValueError("Legacy or fallback mode triggered")
+
+        # Serve strict MCP schema
+        print(f"[INFO] Served strict MCP schema format ({MCP_VERSION}) ✅")
+        last_success_mode = "strict"
+        last_switch_time = time.strftime("%Y-%m-%d %H:%M:%S")
+        return JSONResponse(
+            content=strict_schema,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+        )
+
+    except Exception as e:
+        # Fallback mode engaged
+        print(f"[WARN] Fallback schema engaged due to: {e}")
+        print(f"[INFO] Served fallback flat schema format ✅")
+        last_success_mode = "fallback"
+        last_switch_time = time.strftime("%Y-%m-%d %H:%M:%S")
+        return JSONResponse(
+            content=fallback_schema,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+        )
 
 
 # ==========================================================
@@ -460,6 +533,18 @@ def health_check():
         "phase": "ready" if chrome_ok else "init",
         "uptime_seconds": uptime,
         "chrome_path": CHROME_BINARY,
+    }
+
+
+# ==========================================================
+# /live/status — Track last successful schema mode
+# ==========================================================
+@app.get("/live/status")
+def get_live_status():
+    return {
+        "last_success_mode": last_success_mode,
+        "last_switch_time": last_switch_time,
+        "MCP_VERSION": MCP_VERSION
     }
 
 
