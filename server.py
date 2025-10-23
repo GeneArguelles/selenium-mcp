@@ -45,9 +45,9 @@ MCP_TOOLS_LIST = [
         "description": "Open a URL in a headless Chrome browser and return the page title.",
         "parameters": {
             "type": "object",
-            "properties": {"url": {"type": "string"}}, 
-            "required": ["url"],
-        },
+            "properties": {"url": {"type": "string"}},
+            "required": ["url"]
+        }
     },
     {
         "name": "selenium_click",
@@ -55,8 +55,8 @@ MCP_TOOLS_LIST = [
         "parameters": {
             "type": "object",
             "properties": {"selector": {"type": "string"}},
-            "required": ["selector"],
-        },
+            "required": ["selector"]
+        }
     },
     {
         "name": "selenium_text",
@@ -64,20 +64,21 @@ MCP_TOOLS_LIST = [
         "parameters": {
             "type": "object",
             "properties": {"selector": {"type": "string"}},
-            "required": ["selector"],
-        },
-    },  
-    {   
+            "required": ["selector"]
+        }
+    },
+    {
         "name": "selenium_screenshot",
         "description": "Save a PNG screenshot to /tmp and return its path.",
         "parameters": {
             "type": "object",
             "properties": {"filename": {"type": "string"}},
-            "required": ["filename"],
-        },
-    },
+            "required": ["filename"]
+        }
+    }
 ]
-            
+ 
+           
 # ------------------------------
 # FastAPI & Dependencies
 # ------------------------------
@@ -424,7 +425,29 @@ def root_manifest(request: Request):
 def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder."""
     print(f"[INFO] Served unified /mcp/schema (linked to {MCP_VERSION})")
-    return build_schema_response()
+    print("[DEBUG] MCP_TOOLS_LIST length:", len(MCP_TOOLS_LIST))  # Diagnostic
+
+    schema = {
+        "type": "mcp_server",
+        "mcp_version": MCP_VERSION,
+        "server_info": {
+            "name": "Selenium MCP",
+            "description": "Headless browser automation tools for OpenAI Agent Builder.",
+            "version": MCP_VERSION,
+            "runtime": platform.python_version(),
+        },
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False
+        },
+        "tools": MCP_TOOLS_LIST
+    }
+
+    return JSONResponse(content=schema, headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache"
+    })
 
 
 # ==========================================================
