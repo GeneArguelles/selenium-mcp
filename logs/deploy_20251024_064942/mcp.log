@@ -1,0 +1,9 @@
+/Users/genea1/selenium-mcp/server.py:87: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  today = datetime.utcnow().strftime("%Y%m%d")
+[INFO] Auto-incremented MCP version: v20251023g
+[INFO] Launching MCP Server on port 10000 (version=v20251023g)
+INFO:     Started server process [6901]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:10000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:55053 - "GET /health HTTP/1.1" 200 OK
