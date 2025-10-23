@@ -21,27 +21,27 @@ mkdir -p "$LOG_DIR"
 echo "[INFO] Logs rotated. Active folder: $LOG_DIR"
 
 # 3️⃣ Check Chrome binaries
-CHROME_PATH="/opt/render/project/src/.local/chrome/chrome-linux/chrome"
-CHROMEDRIVER_PATH="./chromedriver/chromedriver"
-
-if [ -f "$CHROMEDRIVER_PATH" ]; then
-  echo "[INFO] ✅ ChromeDriver binary present at $CHROMEDRIVER_PATH"
+if [ -f "./chromedriver/chromedriver" ]; then
+  echo "[INFO] ✅ ChromeDriver binary present at ./chromedriver/chromedriver"
 else
   echo "[ERROR] ❌ ChromeDriver not found!"
   exit 1
 fi
 
-if [ -f "$CHROME_PATH" ]; then
-  echo "[INFO] ✅ Chrome binary confirmed: $CHROME_PATH"
+if [ -f "/opt/render/project/src/.local/chrome/chrome-linux/chrome" ]; then
+  echo "[INFO] ✅ Chrome binary confirmed: /opt/render/project/src/.local/chrome/chrome-linux/chrome"
 else
-  echo "[WARN] ⚠️ Chrome binary not found — using fallback local path"
+  echo "[WARN] ⚠️ Chrome binary not found — using local path"
 fi
 
-# 4️⃣ Launch MCP Server using uvicorn with Render PORT binding
+# 4️⃣ Launch MCP Server
 echo "[INFO] Launching MCP Server via Uvicorn on port ${PORT:-10000}..."
-nohup uvicorn server:app --host 0.0.0.0 --port "${PORT:-10000}" >"$LOG_DIR/mcp.log" 2>&1 &
+nohup python3 server.py >"$LOG_DIR/mcp.log" 2>&1 &
 
-# 5️⃣ Warmup: Auto-ping MCP /mcp/schema endpoint to reduce cold-start latency
+# ==========================================================
+# 🧩 MCP Auto-Warmup + Latency Analytics (GET + POST)
+# Simulates Agent Builder handshake and warms up /mcp/schema
+# ==========================================================
 WARMUP_URL="https://selenium-mcp.onrender.com/mcp/schema"
 MAX_ATTEMPTS=10
 DELAY=3
@@ -55,42 +55,41 @@ echo "=========================================================="
 for ((i=1; i<=MAX_ATTEMPTS; i++)); do
   echo "[WARMUP] Attempt $i/$MAX_ATTEMPTS → $WARMUP_URL"
 
+  # ---- GET Test ----
   RESULT_GET=$(curl -s -o /tmp/warmup_get.json -w "%{http_code} %{time_total}" "$WARMUP_URL")
   STATUS_GET=$(echo "$RESULT_GET" | awk '{print $1}')
   LAT_GET=$(echo "$RESULT_GET" | awk '{print $2}')
   GET_LATENCIES+=("$LAT_GET")
   echo "  [GET]  HTTP $STATUS_GET | ${LAT_GET}s"
 
+  # ---- POST Test ----
   RESULT_POST=$(curl -s -X POST -H "Content-Type: application/json" \
-    -o /tmp/warmup_post.json -w "%{http_code} %{time_total}" -d '{}' "$WARMUP_URL")
+      -o /tmp/warmup_post.json -w "%{http_code} %{time_total}" \
+      -d '{}' "$WARMUP_URL")
   STATUS_POST=$(echo "$RESULT_POST" | awk '{print $1}')
   LAT_POST=$(echo "$RESULT_POST" | awk '{print $2}')
   POST_LATENCIES+=("$LAT_POST")
   echo "  [POST] HTTP $STATUS_POST | ${LAT_POST}s"
 
+  # ---- Success condition ----
   if [[ "$STATUS_GET" == "200" || "$STATUS_POST" == "200" ]]; then
     echo "✅ [WARMUP] MCP schema warmed successfully at $(date)"
-    jq '.manifest.tools | length' /tmp/warmup_post.json 2>/dev/null | \
-      xargs -I{} echo "[WARMUP] Tools detected in manifest: {}"
+    echo "----------------------------------------------------------"
+    TOOLS_COUNT=$(jq '.tools | length' /tmp/warmup_post.json 2>/dev/null)
+    echo "[WARMUP] Tools detected in schema: $TOOLS_COUNT"
+    jq -r '.tools[].name' /tmp/warmup_post.json 2>/dev/null | \
+      xargs -I{} echo "[WARMUP] → Tool: {}"
+    echo "=========================================================="
     break
   else
-    echo "❌ [WARMUP] Not ready (GET=$STATUS_GET, POST=$STATUS_POST). Retrying in ${DELAY}s..."
-    sleep "$DELAY"
+    echo "❌ [WARMUP] Endpoint not ready (GET=$STATUS_GET, POST=$STATUS_POST). Retrying in ${DELAY}s..."
+    sleep $DELAY
   fi
 done
 
-# 6️⃣ Print warmup latency summary
-if (( ${#GET_LATENCIES[@]} > 0 )); then
-  AVG_GET=$(printf '%s\n' "${GET_LATENCIES[@]}" | awk '{sum+=$1} END {if (NR>0) printf "%.3f", sum/NR}')
-else
-  AVG_GET="N/A"
-fi
-
-if (( ${#POST_LATENCIES[@]} > 0 )); then
-  AVG_POST=$(printf '%s\n' "${POST_LATENCIES[@]}" | awk '{sum+=$1} END {if (NR>0) printf "%.3f", sum/NR}')
-else
-  AVG_POST="N/A"
-fi
+# ---- Latency Summary ----
+AVG_GET=$(printf '%s\n' "${GET_LATENCIES[@]}" | awk '{sum+=$1} END {if (NR>0) printf "%.3f", sum/NR; else print "N/A"}')
+AVG_POST=$(printf '%s\n' "${POST_LATENCIES[@]}" | awk '{sum+=$1} END {if (NR>0) printf "%.3f", sum/NR; else print "N/A"}')
 
 echo "----------------------------------------------------------"
 echo "[WARMUP] Average Latency Summary:"
@@ -99,20 +98,25 @@ echo "  POST → ${AVG_POST}s over ${#POST_LATENCIES[@]} attempts"
 echo "----------------------------------------------------------"
 
 if [[ "$STATUS_GET" != "200" && "$STATUS_POST" != "200" ]]; then
-  echo "[WARMUP] ⚠️ MCP schema not ready after ${MAX_ATTEMPTS} attempts."
-  echo "[WARMUP] This may cause initial 502s until container fully warms."
+  echo "[WARMUP] ⚠️ MCP schema endpoint not ready after ${MAX_ATTEMPTS} attempts."
+  echo "[WARMUP] This may cause temporary 502 errors until Render fully warms."
 fi
+echo "=========================================================="
 
-# 7️⃣ Optional: Continuous keep-alive to prevent Render sleep (every 5 minutes)
-# Comment this block out if you're on a paid Render plan or using external keep-alive pings
-# echo "[KEEP-ALIVE] Starting background keep-alive pings every 5 min..."
-# while true; do
-#   curl -s "$WARMUP_URL" > /dev/null
-#   sleep 300
-# done
+# 5️⃣ Wait for local health check
+echo "[INFO] Waiting for MCP local health..."
+for i in {1..10}; do
+  sleep 1
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-10000}/health || true)
+  if [ "$STATUS" == "200" ]; then
+    echo "[✅ HEALTHY] MCP is running locally (uptime: ${i}s)"
+    break
+  fi
+  echo "[INFO] Attempt ${i}/10: not ready (HTTP $STATUS)"
+done
 
-# 8️⃣ Final Diagnostic
+# 6️⃣ Final diagnostics
 echo "=========================================================="
 echo "[INFO] MCP deployment complete and warming initiated."
-echo "Logs: $LOG_DIR/mcp.log"
+echo "[INFO] Logs: $LOG_DIR/mcp.log"
 echo "=========================================================="
