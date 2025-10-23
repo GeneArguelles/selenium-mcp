@@ -340,35 +340,29 @@ def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /live Schema (self-adaptive OpenAI Agent Builder format)
+# /live → Flat-first adaptive schema (Builder-preferred)
 # ==========================================================
-# Global state variable to remember last success mode
-last_success_mode = "strict"
+last_success_mode = "flat"
 last_switch_time = None
 
 @app.api_route("/live", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_adaptive_live(request: Request):
     """
-    Serves the strict MCP manifest expected by OpenAI Agent Builder.
-    Automatically falls back to a flat legacy manifest if compatibility issues occur.
-    Remembers the last successfully served mode (strict vs fallback).
-    Supports manual override via ?mode=fallback or ?mode=strict query params.
+    OpenAI Agent Builder sometimes ignores 'tools' at the top level if
+    'type': 'mcp_server' appears first. This version prioritizes a flat
+    'manifest' wrapper for Builder discovery, and only falls back to
+    strict MCP spec if needed.
     """
+    import time
 
-    global last_success_mode, last_switch_time
+    user_agent = request.headers.get("User-Agent", "unknown")
+    requested_mode = "auto"
+    effective_mode = "flat" if last_success_mode == "flat" else "strict"
 
-    # Capture request context
-    client_ua = request.headers.get("User-Agent", "unknown")
-    mode = request.query_params.get("mode", "").lower()
+    print(f"[INFO] /live hit by {user_agent}")
+    print(f"[INFO] Requested mode=({requested_mode}) | Using effective_mode={effective_mode}")
 
-    # Determine effective mode
-    effective_mode = mode if mode in ["strict", "fallback"] else last_success_mode
-
-    print(f"\n[INFO] /live hit by {client_ua}")
-    print(f"[INFO] Requested mode={mode or '(auto)'} | Using effective_mode={effective_mode}")
-    print(f"[INFO] Last successful mode={last_success_mode}\n")
-
-    # ---------- Strict MCP schema ----------
+    # Strict schema (for reference)
     strict_schema = {
         "type": "mcp_server",
         "mcp_version": MCP_VERSION,
@@ -376,7 +370,7 @@ def serve_adaptive_live(request: Request):
             "name": "Selenium MCP",
             "description": "Headless browser automation tools for OpenAI Agent Builder.",
             "version": MCP_VERSION,
-            "runtime": platform.python_version(),
+            "runtime": platform.python_version()
         },
         "capabilities": {"invocation": True},
         "tools": [
@@ -386,8 +380,8 @@ def serve_adaptive_live(request: Request):
                 "parameters": {
                     "type": "object",
                     "properties": {"url": {"type": "string"}},
-                    "required": ["url"],
-                },
+                    "required": ["url"]
+                }
             },
             {
                 "name": "selenium_click",
@@ -395,8 +389,8 @@ def serve_adaptive_live(request: Request):
                 "parameters": {
                     "type": "object",
                     "properties": {"selector": {"type": "string"}},
-                    "required": ["selector"],
-                },
+                    "required": ["selector"]
+                }
             },
             {
                 "name": "selenium_text",
@@ -404,8 +398,8 @@ def serve_adaptive_live(request: Request):
                 "parameters": {
                     "type": "object",
                     "properties": {"selector": {"type": "string"}},
-                    "required": ["selector"],
-                },
+                    "required": ["selector"]
+                }
             },
             {
                 "name": "selenium_screenshot",
@@ -413,54 +407,44 @@ def serve_adaptive_live(request: Request):
                 "parameters": {
                     "type": "object",
                     "properties": {"filename": {"type": "string"}},
-                    "required": ["filename"],
-                },
-            },
-        ],
+                    "required": ["filename"]
+                }
+            }
+        ]
     }
 
-    # ---------- Fallback legacy schema ----------
-    fallback_schema = {
-        "version": "2025-10-01",
-        "tools": strict_schema["tools"],
+    # Flat wrapper schema (preferred for Builder)
+    flat_schema = {
+        "manifest": {
+            "version": MCP_VERSION,
+            "tools": strict_schema["tools"]
+        }
     }
 
     try:
-        # Auto-detect legacy User-Agent or explicit fallback
-        if (
-            "Legacy-Agent" in client_ua
-            or "Compatibility" in client_ua
-            or effective_mode == "fallback"
-        ):
-            raise ValueError("Legacy or fallback mode triggered")
+        if effective_mode == "flat":
+            response_data = flat_schema
+            print(f"[INFO] Served flat Builder manifest format ({MCP_VERSION}) ✅")
+        else:
+            response_data = strict_schema
+            print(f"[INFO] Served strict MCP schema format ({MCP_VERSION}) ⚙️")
 
-        # Serve strict MCP schema
-        print(f"[INFO] Served strict MCP schema format ({MCP_VERSION}) ✅")
-        last_success_mode = "strict"
-        last_switch_time = time.strftime("%Y-%m-%d %H:%M:%S")
+        global last_success_mode, last_switch_time
+        last_success_mode = effective_mode
+        last_switch_time = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+
         return JSONResponse(
-            content=strict_schema,
+            content=response_data,
             headers={
                 "Cache-Control": "no-store, no-cache, must-revalidate",
                 "Pragma": "no-cache",
-                "Content-Type": "application/json; charset=utf-8",
-            },
+                "Content-Type": "application/json; charset=utf-8"
+            }
         )
 
     except Exception as e:
-        # Fallback mode engaged
-        print(f"[WARN] Fallback schema engaged due to: {e}")
-        print(f"[INFO] Served fallback flat schema format ✅")
-        last_success_mode = "fallback"
-        last_switch_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        return JSONResponse(
-            content=fallback_schema,
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate",
-                "Pragma": "no-cache",
-                "Content-Type": "application/json; charset=utf-8",
-            },
-        )
+        print(f"[ERROR] /live exception: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 # ==========================================================
