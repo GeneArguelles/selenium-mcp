@@ -451,6 +451,16 @@ def serve_schema(request: Request):
 
 
 # ==========================================================
+# Versioned schema alias for OpenAI Agent Builder (e.g. /v20251023f/mcp/schema)
+# ==========================================================
+@app.api_route(f"/{MCP_VERSION}/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def serve_versioned_schema(request: Request):
+    """Serve schema for versioned path to ensure compatibility with /v*/live."""
+    print(f"[INFO] Served versioned /{MCP_VERSION}/mcp/schema (linked to canonical /mcp/schema)")
+    return serve_schema(request)  # ✅ just call the canonical version
+
+
+# ==========================================================
 # Canonical Adaptive /live Schema (Strict + Fallback modes)
 # ==========================================================
 last_success_mode = "strict"
@@ -528,16 +538,6 @@ def serve_adaptive_live(request: Request):
         "Cache-Control": "no-store, no-cache, must-revalidate",
         "Pragma": "no-cache"
     })
-
-
-# ==========================================================
-# Versioned schema alias for OpenAI Agent Builder (e.g. /v20251023f/mcp/schema)
-# ==========================================================
-@app.api_route(f"/{MCP_VERSION}/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
-def serve_versioned_schema(request: Request):
-    """Serve schema for versioned path to ensure compatibility with /v*/live."""
-    print(f"[INFO] Served versioned /{MCP_VERSION}/mcp/schema (linked to canonical /mcp/schema)")
-    return build_schema_response()
 
 
 # ==========================================================
