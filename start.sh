@@ -63,12 +63,15 @@ for i in {1..15}; do
 done
 
 # === Optional warmup ping to public endpoint ===
+# Sanitize RENDER_EXTERNAL_URL to avoid double https://
+SANITIZED_URL="${RENDER_EXTERNAL_URL#https://}"
+
 echo "=========================================================="
-echo "[WARMUP] Warming MCP endpoint: https://$RENDER_EXTERNAL_URL/mcp/schema"
+echo "[WARMUP] Warming MCP endpoint: https://$SANITIZED_URL/mcp/schema"
 echo "=========================================================="
 for i in {1..10}; do
-  TIME=$(curl -s -o /dev/null -w "%{time_total}" "https://$RENDER_EXTERNAL_URL/mcp/schema")
-  STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$RENDER_EXTERNAL_URL/mcp/schema")
+  TIME=$(curl -s -o /dev/null -w "%{time_total}" "https://$SANITIZED_URL/mcp/schema")
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SANITIZED_URL/mcp/schema")
   if [[ "$STATUS" == "200" ]]; then
     echo "[WARMUP ✅] Success at attempt $i → $TIME sec"
     break
