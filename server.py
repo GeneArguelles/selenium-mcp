@@ -1,7 +1,8 @@
 # server.py
 # ==========================================================
 # Selenium MCP — Headless Browser Automation (FastAPI MCP)
-# Version: v20251024b
+# Version: v20251024-FULL
+# Author: Gene Arguelles, LLC
 # ==========================================================
 
 from fastapi import FastAPI, Request, HTTPException
@@ -11,59 +12,56 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import os
 
+# ----------------------------------------------------------
+# FastAPI App Init
+# ----------------------------------------------------------
 app = FastAPI()
-MCP_VERSION = "v20251024b"
+MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
+CHROME_BINARY = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
 
-# ==========================================================
-# Health check endpoint (used by Render for liveness checks)
-# ==========================================================
+# ----------------------------------------------------------
+# Health Check — Required for Render Liveness Check
+# ----------------------------------------------------------
 @app.get("/health")
 def health_check():
     """
-    Lightweight Render platform health check endpoint.
-    Returns 200 OK if the server is up.
+    Lightweight liveness check used by Render platform
     """
     return {"status": "ok"}
 
-# ==========================================================
-# Tool Schema Definitions — Public MCP Tool List
-# ==========================================================
+# ----------------------------------------------------------
+# Schema Tool List (strict MCP format)
+# ----------------------------------------------------------
 MCP_TOOLS_LIST = [
     {
         "name": "selenium_open_page",
         "description": "Open a URL in a headless Chrome browser and return the page title.",
         "parameters": {
             "type": "object",
-            "properties": {"url": {"type": "string"}},
-            "required": ["url"],
-        },
+            "properties": {
+                "url": {"type": "string"}
+            },
+            "required": ["url"]
+        }
     }
 ]
 
-# ==========================================================
-# Tool Execution Registry — Internal Function Routing
-# ==========================================================
 TOOL_EXECUTION_MAP = {
     "selenium_open_page": "handle_open_page"
 }
 
-# ==========================================================
-# Shared Chrome Binary Location
-# ==========================================================
-CHROME_BINARY = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
-
-# ==========================================================
-# Pydantic Model for /mcp/invoke
-# ==========================================================
+# ----------------------------------------------------------
+# Invocation Schema Input Model
+# ----------------------------------------------------------
 class InvokeRequest(BaseModel):
     tool: str
     arguments: dict | None = None
 
-# ==========================================================
-# Root Manifest (for MCP discovery)
-# ==========================================================
+# ----------------------------------------------------------
+# Root Manifest — MCP server declaration
+# ----------------------------------------------------------
 @app.get("/")
 def root_manifest(request: Request):
     return {
@@ -77,20 +75,20 @@ def root_manifest(request: Request):
         },
         "endpoints": {
             "schema": f"{request.base_url}mcp/schema",
-            "live": f"{request.base_url}live",
-        },
+            "live": f"{request.base_url}live"
+        }
     }
 
-# ==========================================================
-# Live Check (lightweight ping)
-# ==========================================================
+# ----------------------------------------------------------
+# Live Check — Lightweight Ping
+# ----------------------------------------------------------
 @app.get("/live")
 def live():
     return {"status": "live", "version": MCP_VERSION}
 
-# ==========================================================
-# Schema Endpoint (exposes MCP_TOOLS_LIST)
-# ==========================================================
+# ----------------------------------------------------------
+# MCP Schema — Exposes MCP_TOOLS_LIST in strict format
+# ----------------------------------------------------------
 @app.get("/mcp/schema")
 def get_schema():
     return {
@@ -100,27 +98,27 @@ def get_schema():
             "name": SERVER_NAME,
             "description": SERVER_DESC,
             "version": MCP_VERSION,
-            "runtime": os.getenv("PYTHON_VERSION", "3.11.9"),
+            "runtime": os.getenv("PYTHON_VERSION", "3.11.9")
         },
         "capabilities": {
             "invocation": True,
             "streaming": False,
-            "multi_tool": False,
+            "multi_tool": False
         },
-        "tools": MCP_TOOLS_LIST,
+        "tools": MCP_TOOLS_LIST
     }
 
-# ==========================================================
-# Tool Invocation Endpoint
-# ==========================================================
+# ----------------------------------------------------------
+# MCP Invocation Endpoint
+# ----------------------------------------------------------
 @app.post("/mcp/invoke")
 async def invoke_tool(req: InvokeRequest):
     tool = req.tool
     args = req.arguments or {}
 
     print(f"[INFO] Tool requested: {tool}")
-
     handler_name = TOOL_EXECUTION_MAP.get(tool)
+
     if not handler_name:
         raise HTTPException(status_code=404, detail=f"Unknown tool: {tool}")
 
@@ -134,9 +132,9 @@ async def invoke_tool(req: InvokeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ==========================================================
-# TOOL HANDLER: selenium_open_page
-# ==========================================================
+# ----------------------------------------------------------
+# Tool Handler: selenium_open_page
+# ----------------------------------------------------------
 async def handle_open_page(args: dict):
     url = args.get("url")
     if not url:
@@ -157,9 +155,9 @@ async def handle_open_page(args: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Selenium error: {e}")
 
-# ==========================================================
-# Local Run Entry
-# ==========================================================
+# ----------------------------------------------------------
+# Local Run Entrypoint (for local testing only)
+# ----------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
     print(f"[INFO] Launching MCP Server on port 10000 (version={MCP_VERSION})")
