@@ -254,39 +254,69 @@ def serve_dynamic_versioned_live(request: Request, version: str = Path(...)):
 
 
 # ==========================================================
-# /mcp/invoke — Tool execution
+# /mcp/invoke — Tool execution endpoint
 # ==========================================================
+from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+# === 1️⃣ Data Model ===
 class InvokeRequest(BaseModel):
     tool: str
     arguments: dict | None = None
 
-@app.api_route("/mcp/invoke", methods=["POST", "GET"])
-def invoke_tool(req: InvokeRequest | None = None):
-    if req is None:
-        return {"status": "ready", "message": "MCP invoke endpoint alive."}
+# === 2️⃣ Tool Registry ===
+# This allows easy dynamic dispatch and scaling to more tools.
+TOOL_REGISTRY = {
+    "selenium_open_page": "open_page_handler",  # name maps to function below
+    # Future tools go here
+}
 
-    print(f"[INFO] Invoked tool: {req.tool}")
-    if req.tool == "selenium_open_page":
-        url = req.arguments.get("url") if req.arguments else None
-        if not url:
-            return JSONResponse(content={"error": "Missing 'url' argument."}, status_code=400)
+# === 3️⃣ Tool Implementations ===
+async def open_page_handler(arguments: dict):
+    url = arguments.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="Missing 'url' argument.")
 
-        chrome_opts = Options()
-        chrome_opts.add_argument("--headless")
-        chrome_opts.add_argument("--disable-gpu")
-        chrome_opts.add_argument("--no-sandbox")
-        chrome_opts.add_argument("--disable-dev-shm-usage")
-        chrome_opts.binary_location = CHROME_BINARY
+    chrome_opts = Options()
+    chrome_opts.add_argument("--headless")
+    chrome_opts.add_argument("--disable-gpu")
+    chrome_opts.add_argument("--no-sandbox")
+    chrome_opts.add_argument("--disable-dev-shm-usage")
+    chrome_opts.binary_location = CHROME_BINARY
 
-        try:
-            with webdriver.Chrome(options=chrome_opts) as driver:
-                driver.get(url)
-                title = driver.title
-            return {"result": f"Opened {url}", "title": title}
-        except Exception as e:
-            return {"error": str(e)}
+    try:
+        with webdriver.Chrome(options=chrome_opts) as driver:
+            driver.get(url)
+            title = driver.title
+        return {"result": f"Opened {url}", "title": title}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {"error": f"Unknown tool: {req.tool}"}
+# === 4️⃣ Dispatcher Endpoint ===
+@app.post("/mcp/invoke")
+async def invoke_tool(req: InvokeRequest):
+    tool_name = req.tool
+    arguments = req.arguments or {}
+
+    print(f"[INFO] Tool invocation requested: {tool_name}")
+    
+    handler_name = TOOL_REGISTRY.get(tool_name)
+    if not handler_name:
+        raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_name}")
+
+    # Dynamically dispatch tool handler
+    handler_func = globals().get(handler_name)
+    if not callable(handler_func):
+        raise HTTPException(status_code=500, detail="Tool handler not callable.")
+
+    result = await handler_func(arguments)
+    return {"tool": tool_name, "result": result}
+
+# === 5️⃣ Optional GET Endpoint for Readiness Check ===
+@app.get("/mcp/invoke")
+def invoke_status():
+    return {"status": "ready", "message": "MCP invoke endpoint alive."}
 
 # ==========================================================
 # /health
