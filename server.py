@@ -129,26 +129,27 @@ def post_root_manifest(request: Request):
 def live():
     return {"status": "live", "version": MCP_VERSION}
 
+
 # ----------------------------------------------------------
 # MCP Schema — Exposes MCP_TOOLS_LIST in strict format
 # ----------------------------------------------------------
 @app.get("/mcp/schema")
 def get_schema():
     return {
-        "type": "mcp_server",
-        "mcp_version": MCP_VERSION,
-        "server_info": {
-            "name": SERVER_NAME,
-            "description": SERVER_DESC,
-            "version": MCP_VERSION,
-            "runtime": os.getenv("PYTHON_VERSION", "3.11.9")
+        "type": "openai_manifest",  # ✅ REQUIRED for Agent Builder
+        "schema_version": "v1",
+        "name_for_human": "Selenium MCP",
+        "name_for_model": "selenium",
+        "description_for_human": "Use Selenium to open pages and extract web content.",
+        "description_for_model": "Use this to control a headless Chrome browser.",
+        "auth": { "type": "none" },
+        "api": {
+            "type": "openapi",
+            "url": f"{BASE_URL}/openapi.yaml"  # or json if using inline
         },
-        "capabilities": {
-            "invocation": True,
-            "streaming": False,
-            "multi_tool": False
-        },
-        "tools": MCP_TOOLS_LIST
+        "logo_url": f"{BASE_URL}/logo.png",
+        "contact_email": "you@example.com",
+        "legal_info_url": "https://example.com/legal"
     }
 
 @app.post("/")
