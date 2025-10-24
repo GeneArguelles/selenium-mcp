@@ -125,7 +125,7 @@ def post_root_manifest(request: Request):
 # ----------------------------------------------------------
 # Live Check — Lightweight Ping
 # ----------------------------------------------------------
-@app.get("/live")
+@app.api_route("/live", methods=["GET", "POST"])
 def live():
     return {"status": "live", "version": MCP_VERSION}
 
