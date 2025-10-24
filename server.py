@@ -31,6 +31,7 @@ MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
 CHROME_BINARY = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
+BASE_URL = "https://selenium-mcp.onrender.com"
 
 # ----------------------------------------------------------
 # Root manifest endpoint (for OpenAI Agent Builder)
