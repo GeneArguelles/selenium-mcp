@@ -17,6 +17,17 @@ SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
 
 # ==========================================================
+# Health check endpoint (used by Render for liveness checks)
+# ==========================================================
+@app.get("/health")
+def health_check():
+    """
+    Lightweight Render platform health check endpoint.
+    Returns 200 OK if the server is up.
+    """
+    return {"status": "ok"}
+
+# ==========================================================
 # Tool Schema Definitions — Public MCP Tool List
 # ==========================================================
 MCP_TOOLS_LIST = [
