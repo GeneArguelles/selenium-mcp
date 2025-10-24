@@ -59,9 +59,9 @@ class InvokeRequest(BaseModel):
     tool: str
     arguments: dict | None = None
 
-# ----------------------------------------------------------
-# Root Manifest — MCP server declaration
-# ----------------------------------------------------------
+# ==========================================================
+# Root Manifest (for MCP discovery)
+# ==========================================================
 @app.get("/")
 def root_manifest(request: Request):
     return {
@@ -79,6 +79,25 @@ def root_manifest(request: Request):
         }
     }
 
+# ----------------------------------------------------------
+# POST Root — Return manifest (for Agent Builder)
+# ----------------------------------------------------------
+@app.post("/")
+def post_root_manifest(request: Request):
+    return {
+        "type": "mcp_server",
+        "mcp_version": MCP_VERSION,
+        "version": MCP_VERSION,
+        "server_info": {
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": MCP_VERSION,
+        },
+        "endpoints": {
+            "schema": f"{request.base_url}mcp/schema",
+            "live": f"{request.base_url}live",
+        },
+    }
 
 # ----------------------------------------------------------
 # Live Check — Lightweight Ping
