@@ -13,6 +13,19 @@ from selenium.webdriver.chrome.options import Options
 import os
 
 # ----------------------------------------------------------
+# Imports and FastAPI app setup
+# ----------------------------------------------------------
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or restrict to OpenAI IPs
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ----------------------------------------------------------
 # FastAPI App Init
 # ----------------------------------------------------------
 app = FastAPI()
@@ -20,6 +33,18 @@ MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
 CHROME_BINARY = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
+
+# ----------------------------------------------------------
+# Root manifest endpoint (for OpenAI Agent Builder)
+# ----------------------------------------------------------
+@app.get("/")
+def root_manifest():
+    return {
+        "type": "manifest",
+        "name": SERVER_NAME,
+        "description": SERVER_DESC,
+        "version": MCP_VERSION
+    }
 
 # ----------------------------------------------------------
 # Health Check — Required for Render Liveness Check
