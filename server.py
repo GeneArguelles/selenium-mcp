@@ -302,9 +302,12 @@ def health_check():
     }
 
 # ==========================================================
-# Local Run Entry
+# Local Run Entry (Render-compatible)
 # ==========================================================
 if __name__ == "__main__":
     import uvicorn
-    print(f"[INFO] Launching MCP Server on port 10000 (version={MCP_VERSION})")
-    uvicorn.run(app, host="0.0.0.0", port=10000)
+
+    port = int(os.environ.get("PORT", 10000))  # Use PORT from environment or fallback to 10000
+    print(f"[INFO] Launching MCP Server on port {port} (version={MCP_VERSION})")
+
+    uvicorn.run("server:app", host="0.0.0.0", port=port)
