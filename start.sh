@@ -1,92 +1,86 @@
-#!/usr/bin/env bash
-set -e
+#!/bin/bash
+# ==========================================================
+# start.sh — Start Selenium MCP (local or Render)
+# ==========================================================
 
 echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
 
-# 1️⃣ Load environment
+# === Setup environment
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+LOG_DIR="logs/deploy_$TIMESTAMP"
+mkdir -p "$LOG_DIR"
+
+echo "[INFO] Logs rotated. Active folder: $LOG_DIR"
+
+# === Load .env safely ===
 if [ -f .env ]; then
   echo "[INFO] Loading environment variables from .env safely..."
   set -a
   source .env
   set +a
 else
-  echo "[WARN] No .env found — using system defaults."
+  echo "[WARN] No .env file found."
 fi
 
-# 2️⃣ Rotate logs
-LOG_DIR="logs/deploy_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$LOG_DIR"
-echo "[INFO] Logs rotated. Active folder: $LOG_DIR"
-
-# 3️⃣ Check Chrome binaries
-if [ -f "./chromedriver/chromedriver" ]; then
-  echo "[INFO] ✅ ChromeDriver binary present at ./chromedriver/chromedriver"
-else
-  echo "[ERROR] ❌ ChromeDriver not found!"
+# === Check ChromeDriver and Chrome binaries ===
+if [ ! -f ./chromedriver/chromedriver ]; then
+  echo "[ERROR] Missing ChromeDriver at ./chromedriver/chromedriver"
   exit 1
 fi
+echo "[INFO] ✅ ChromeDriver binary present at ./chromedriver/chromedriver"
 
-if [ -f "/opt/render/project/src/.local/chrome/chrome-linux/chrome" ]; then
-  echo "[INFO] ✅ Chrome binary confirmed: /opt/render/project/src/.local/chrome/chrome-linux/chrome"
+if [ ! -x "$CHROME_BINARY" ]; then
+  echo "[ERROR] CHROME_BINARY is not executable: $CHROME_BINARY"
+  exit 1
+fi
+echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
+
+# === Start Uvicorn ===
+UVICORN_CMD="uvicorn server:app --host 0.0.0.0 --port 10000"
+echo "[INFO] Launching MCP Server via Uvicorn on port 10000..."
+
+# Detect Render environment via ENV variable or path
+if [[ "$RENDER" == "true" || "$PWD" == *"/opt/render"* ]]; then
+  echo "[INFO] Detected Render environment. Starting in foreground..."
+  $UVICORN_CMD
 else
-  echo "[WARN] ⚠️ Chrome binary not found — using local path"
+  echo "[INFO] Starting in background (local dev)..."
+  nohup bash -c "$UVICORN_CMD" > "$LOG_DIR/server.log" 2>&1 &
 fi
 
-# 4️⃣ Launch MCP Server
-echo "[INFO] Launching MCP Server via Uvicorn on port ${PORT:-10000}..."
-nohup python3 server.py >"$LOG_DIR/mcp.log" 2>&1 &
-
-# 5️⃣ Wait for local server to be ready
+# === Health check loop ===
 echo "[INFO] Waiting for MCP local health check..."
 for i in {1..15}; do
-  STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${PORT:-10000}/mcp/schema || true)
-  if [ "$STATUS" == "200" ]; then
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:10000/mcp/schema)
+  if [[ "$STATUS" == "200" ]]; then
     echo "[✅ READY] MCP schema available locally after ${i}s"
     break
   fi
-  echo "[WAIT] Attempt ${i}/15: not ready (HTTP $STATUS). Retrying..."
-  sleep 2
+  echo "[WAIT] Attempt $i/15: not ready (HTTP $STATUS). Retrying..."
+  sleep 1
 done
 
-# ==========================================================
-# 🧩 MCP Remote Warmup (GET only to avoid schema POST issues)
-# ==========================================================
-WARMUP_URL="https://selenium-mcp.onrender.com/mcp/schema"
-MAX_ATTEMPTS=10
-DELAY=3
-LATENCIES=()
-
+# === Optional warmup ping to public endpoint ===
 echo "=========================================================="
-echo "[WARMUP] Warming MCP endpoint: $WARMUP_URL"
+echo "[WARMUP] Warming MCP endpoint: https://$RENDER_EXTERNAL_URL/mcp/schema"
 echo "=========================================================="
-
-for ((i=1; i<=MAX_ATTEMPTS; i++)); do
-  echo "[WARMUP] Attempt $i/$MAX_ATTEMPTS → GET $WARMUP_URL"
-  RESULT=$(curl -s -o /tmp/warmup_response.json -w "%{http_code} %{time_total}" "$WARMUP_URL")
-  STATUS=$(echo "$RESULT" | awk '{print $1}')
-  LATENCY=$(echo "$RESULT" | awk '{print $2}')
-  LATENCIES+=("$LATENCY")
-  echo "  → HTTP $STATUS | ${LATENCY}s"
-
+for i in {1..10}; do
+  TIME=$(curl -s -o /dev/null -w "%{time_total}" "https://$RENDER_EXTERNAL_URL/mcp/schema")
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$RENDER_EXTERNAL_URL/mcp/schema")
   if [[ "$STATUS" == "200" ]]; then
-    echo "✅ [WARMUP] Remote MCP schema warmed successfully."
+    echo "[WARMUP ✅] Success at attempt $i → $TIME sec"
     break
+  else
+    echo "❌ [WARMUP] Not ready (HTTP $STATUS). Retrying in 3s..."
+    sleep 3
   fi
-
-  echo "❌ [WARMUP] Not ready (HTTP $STATUS). Retrying in ${DELAY}s..."
-  sleep $DELAY
 done
 
-# Summary
-AVG_LAT=$(printf '%s\n' "${LATENCIES[@]}" | awk '{sum+=$1} END {if (NR>0) printf "%.3f", sum/NR; else print "N/A"}')
 echo "----------------------------------------------------------"
-echo "[WARMUP] Average schema GET latency: ${AVG_LAT}s"
 echo "[WARMUP] MCP warmup complete."
 echo "=========================================================="
-
-# 6️⃣ Final diagnostics
 echo "[INFO] MCP deployment complete and fully warmed."
 echo "[INFO] Logs: $LOG_DIR/mcp.log"
 echo "=========================================================="
