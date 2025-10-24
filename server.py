@@ -109,6 +109,17 @@ def get_schema():
     }
 
 # ----------------------------------------------------------
+# MCP POST fallback
+# ----------------------------------------------------------
+@app.post("/mcp/schema")
+def post_schema():
+    """
+    Graceful POST fallback for schema endpoint.
+    Agent Builder or other clients may probe via POST.
+    """
+    return get_schema()
+
+# ----------------------------------------------------------
 # MCP Invocation Endpoint
 # ----------------------------------------------------------
 @app.post("/mcp/invoke")
