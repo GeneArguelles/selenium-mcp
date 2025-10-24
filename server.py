@@ -79,6 +79,7 @@ def root_manifest(request: Request):
         }
     }
 
+
 # ----------------------------------------------------------
 # Live Check — Lightweight Ping
 # ----------------------------------------------------------
@@ -107,6 +108,10 @@ def get_schema():
         },
         "tools": MCP_TOOLS_LIST
     }
+
+@app.post("/")
+def post_root_manifest(request: Request):
+    return root_manifest(request)
 
 # ----------------------------------------------------------
 # MCP POST fallback
