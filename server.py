@@ -27,6 +27,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static directory for logo, etc.
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
@@ -154,35 +157,18 @@ def serve_manifest():
         "schema_version": "v1",
         "name_for_human": "Selenium MCP",
         "name_for_model": "selenium",
-        "description_for_human": (
-            "Use Selenium to open pages, click elements, take screenshots, "
-            "and extract text content from web pages in a headless Chrome environment."
-        ),
-        "description_for_model": (
-            "Use this MCP server to interact with websites via a headless Chrome browser. "
-            "You can open pages, click elements, capture screenshots, and retrieve text."
-        ),
-        "auth": {"type": "none"},
+        "description_for_human": "Use Selenium to open pages, click elements, extract text, and take screenshots.",
+        "description_for_model": "Plugin for controlling a headless browser via Selenium. Tools include page open, click, text extraction, and screenshots.",
+        "auth": {
+            "type": "none"
+        },
         "api": {
             "type": "json",
-            "url": "https://selenium-mcp.onrender.com/mcp/schema"  # ✅ Direct schema reference
+            "url": "https://selenium-mcp.onrender.com/mcp/schema"
         },
-        "logo_url": "https://selenium-mcp.onrender.com/logo.png",
-        "contact_email": "you@example.com",
-        "legal_info_url": "https://example.com/legal",
-        "developer": {
-            "name": "Gene Arguelles, LLC",
-            "email": "you@example.com",
-            "url": "https://selenium-mcp.onrender.com"
-        },
-        "server": {
-            "base_url": "https://selenium-mcp.onrender.com",
-            "endpoints": {
-                "schema": "https://selenium-mcp.onrender.com/mcp/schema",
-                "internal_schema": "https://selenium-mcp.onrender.com/mcp/internal_schema",
-                "live": "https://selenium-mcp.onrender.com/live"
-            }
-        }
+        "logo_url": "https://selenium-mcp.onrender.com/static/logo.png",
+        "contact_email": "youremail@example.com",
+        "legal_info_url": "https://selenium-mcp.onrender.com/legal"
     }
 
 
