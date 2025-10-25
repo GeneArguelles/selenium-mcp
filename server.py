@@ -186,6 +186,20 @@ def live():
 
 
 # ----------------------------------------------------------
+# MCP Schema — Strictly Formatted Tool List for Agents
+# ----------------------------------------------------------
+@app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def serve_schema(request: Request):
+    user_agent = request.headers.get("User-Agent", "unknown")
+    print(f"[SCHEMA] Request from: {user_agent}")
+
+    return JSONResponse({
+        "version": MCP_VERSION,
+        "tools": MCP_TOOLS_LIST
+    })
+
+
+# ----------------------------------------------------------
 # MCP Schema — Exposes MCP_TOOLS_LIST in strict format
 # ----------------------------------------------------------
 @app.get("/mcp/schema")
@@ -242,8 +256,6 @@ def internal_schema():
 # ----------------------------------------------------------
 # openapi.yaml route
 # ----------------------------------------------------------
-
-
 @app.get("/openapi.yaml")
 def openapi_spec():
     return Response(yaml.dump({
