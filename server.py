@@ -144,6 +144,48 @@ TOOL_EXECUTION_MAP = {
 }
 
 
+# ==========================================================
+# OpenAI MCP Manifest (required for Agent Builder discovery)
+# ==========================================================
+@app.get("/mcp/manifest.json")
+def serve_manifest():
+    return {
+        "type": "openai_manifest",
+        "schema_version": "v1",
+        "name_for_human": "Selenium MCP",
+        "name_for_model": "selenium",
+        "description_for_human": (
+            "Use Selenium to open pages, click elements, take screenshots, "
+            "and extract text content from web pages in a headless Chrome environment."
+        ),
+        "description_for_model": (
+            "Use this MCP server to interact with websites via a headless Chrome browser. "
+            "You can open pages, click elements, capture screenshots, and retrieve text."
+        ),
+        "auth": {"type": "none"},
+        "api": {
+            "type": "json",
+            "url": "https://selenium-mcp.onrender.com/mcp/schema"  # ✅ Direct schema reference
+        },
+        "logo_url": "https://selenium-mcp.onrender.com/logo.png",
+        "contact_email": "you@example.com",
+        "legal_info_url": "https://example.com/legal",
+        "developer": {
+            "name": "Gene Arguelles, LLC",
+            "email": "you@example.com",
+            "url": "https://selenium-mcp.onrender.com"
+        },
+        "server": {
+            "base_url": "https://selenium-mcp.onrender.com",
+            "endpoints": {
+                "schema": "https://selenium-mcp.onrender.com/mcp/schema",
+                "internal_schema": "https://selenium-mcp.onrender.com/mcp/internal_schema",
+                "live": "https://selenium-mcp.onrender.com/live"
+            }
+        }
+    }
+
+
 # ----------------------------------------------------------
 # Invocation Schema Input Model
 # ----------------------------------------------------------
@@ -170,6 +212,7 @@ def root_manifest(request: Request):
             "live": f"{request.base_url}live"
         }
     }
+
 
 # ----------------------------------------------------------
 # POST Root — Return manifest (for Agent Builder)
