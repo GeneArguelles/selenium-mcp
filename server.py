@@ -173,6 +173,23 @@ def serve_manifest():
     }
 
 
+# ==========================================================
+# Static Manifest Alias (/static/manifest.json)
+# ==========================================================
+@app.get("/static/manifest.json")
+def serve_static_manifest():
+    """
+    Serve a stable, version-pinned manifest for external tools.
+    Mirrors the canonical /mcp/schema endpoint but does not
+    require versioned routing.
+    """
+    print(f"[INFO] Served /static/manifest.json → mirrors /mcp/schema ({MCP_VERSION})")
+    manifest = build_schema_response()
+    # ensure consistent filename response
+    manifest.headers["Content-Disposition"] = 'inline; filename="manifest.json"'
+    return manifest
+
+
 # ----------------------------------------------------------
 # Invocation Schema Input Model
 # ----------------------------------------------------------
