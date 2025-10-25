@@ -61,59 +61,71 @@ def health_check():
 # ----------------------------------------------------------
 MCP_TOOLS_LIST = [
     {
-        "name": "selenium_open_page",
-        "description": "Open a URL in a headless Chrome browser and return the page title.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "The full URL of the page to open (including https://)."
-                }
-            },
-            "required": ["url"]
+        "type": "function",
+        "function": {
+            "name": "selenium_open_page",
+            "description": "Open a URL in a headless Chrome browser and return the page title.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The full URL of the page to open (including https://)."
+                    }
+                },
+                "required": ["url"]
+            }
         }
     },
     {
-        "name": "selenium_click",
-        "description": "Click an element on the page using a CSS selector.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "selector": {
-                    "type": "string",
-                    "description": "The CSS selector for the element to click."
-                }
-            },
-            "required": ["selector"]
+        "type": "function",
+        "function": {
+            "name": "selenium_click",
+            "description": "Click an element on the page using a CSS selector.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "The CSS selector for the element to click."
+                    }
+                },
+                "required": ["selector"]
+            }
         }
     },
     {
-        "name": "selenium_screenshot",
-        "description": "Take a screenshot and save it to a file. Returns the local path to the screenshot.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "filename": {
-                    "type": "string",
-                    "description": "The desired filename (with .png extension) to save the screenshot."
-                }
-            },
-            "required": ["filename"]
+        "type": "function",
+        "function": {
+            "name": "selenium_screenshot",
+            "description": "Take a screenshot and save it to a file. Returns the local path to the screenshot.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "The desired filename (with .png extension) to save the screenshot."
+                    }
+                },
+                "required": ["filename"]
+            }
         }
     },
     {
-        "name": "selenium_get_text",
-        "description": "Retrieve visible text content from the page using a CSS selector.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "selector": {
-                    "type": "string",
-                    "description": "The CSS selector for the element to extract text from."
-                }
-            },
-            "required": ["selector"]
+        "type": "function",
+        "function": {
+            "name": "selenium_get_text",
+            "description": "Retrieve visible text content from the page using a CSS selector.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "The CSS selector for the element to extract text from."
+                    }
+                },
+                "required": ["selector"]
+            }
         }
     }
 ]
