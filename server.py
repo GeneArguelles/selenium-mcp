@@ -227,6 +227,19 @@ def post_root_manifest(request: Request):
 
 
 # ----------------------------------------------------------
+# Tool List — Strict JSON block for Agent Builder
+# ----------------------------------------------------------
+@app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
+async def serve_schema(request: Request):
+    user_agent = request.headers.get("User-Agent", "unknown")
+    print(f"[SCHEMA] Request from: {user_agent}")
+
+    return JSONResponse({
+        "tools": MCP_TOOLS_LIST
+    })
+
+
+# ----------------------------------------------------------
 # Internal Debug Route — Reveals active MCP schema & tools
 # ----------------------------------------------------------
 @app.get("/mcp/internal_schema")
