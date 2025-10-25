@@ -55,6 +55,7 @@ def health_check():
     """
     return {"status": "ok"}
 
+
 # ----------------------------------------------------------
 # Schema Tool List (strict MCP format)
 # ----------------------------------------------------------
@@ -65,16 +66,69 @@ MCP_TOOLS_LIST = [
         "parameters": {
             "type": "object",
             "properties": {
-                "url": {"type": "string"}
+                "url": {
+                    "type": "string",
+                    "description": "The full URL of the page to open (including https://)."
+                }
             },
             "required": ["url"]
+        }
+    },
+    {
+        "name": "selenium_click",
+        "description": "Click an element on the page using a CSS selector.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "The CSS selector for the element to click."
+                }
+            },
+            "required": ["selector"]
+        }
+    },
+    {
+        "name": "selenium_screenshot",
+        "description": "Take a screenshot and save it to a file. Returns the local path to the screenshot.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string",
+                    "description": "The desired filename (with .png extension) to save the screenshot."
+                }
+            },
+            "required": ["filename"]
+        }
+    },
+    {
+        "name": "selenium_get_text",
+        "description": "Retrieve visible text content from the page using a CSS selector.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "selector": {
+                    "type": "string",
+                    "description": "The CSS selector for the element to extract text from."
+                }
+            },
+            "required": ["selector"]
         }
     }
 ]
 
+@app.get("/mcp/internal_schema")
+def internal_schema():
+    return {
+        "tool_count": len(MCP_TOOLS_LIST),
+        "tools": MCP_TOOLS_LIST
+    }
+
 TOOL_EXECUTION_MAP = {
     "selenium_open_page": "handle_open_page"
 }
+
 
 # ----------------------------------------------------------
 # Invocation Schema Input Model
@@ -156,6 +210,34 @@ def get_schema():
 @app.post("/")
 def post_root_manifest(request: Request):
     return root_manifest(request)
+
+
+# ----------------------------------------------------------
+# Internal Debug Route — Reveals active MCP schema & tools
+# ----------------------------------------------------------
+@app.get("/mcp/internal_schema")
+def internal_schema():
+    try:
+        return {
+            "type": "mcp_server",
+            "version": "v1",
+            "server_name": "selenium-mcp",
+            "description": "Internal diagnostic route exposing the active MCP tools list.",
+            "manifest_schema": {
+                "schema_type": "openai_manifest",
+                "schema_version": "v1",
+                "endpoint": f"{BASE_URL}/mcp/schema"
+            },
+            "tools_registered": len(MCP_TOOLS_LIST),
+            "tool_names": [tool["name"] for tool in MCP_TOOLS_LIST],
+            "tools": MCP_TOOLS_LIST
+        }
+    except Exception as e:
+        return {
+            "error": "Failed to load MCP internal schema.",
+            "details": str(e)
+        }
+
 
 # ----------------------------------------------------------
 # MCP POST fallback
