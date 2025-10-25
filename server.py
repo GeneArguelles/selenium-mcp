@@ -20,6 +20,9 @@ import os
 from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
+# Serve static assets (like logo.png)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # or restrict to OpenAI IPs
@@ -27,9 +30,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Mount static directory for logo, etc.
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
