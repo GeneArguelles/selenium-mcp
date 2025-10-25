@@ -57,7 +57,7 @@ def health_check():
 
 
 # ----------------------------------------------------------
-# Schema Tool List (strict MCP format)
+# MCP_TOOLS_LIST (Strict OpenAI Function Schema)
 # ----------------------------------------------------------
 MCP_TOOLS_LIST = [
     {
@@ -130,10 +130,12 @@ MCP_TOOLS_LIST = [
     }
 ]
 
-@app.get("/mcp/internal_schema")
-def internal_schema():
+@app.post("/mcp/schema")
+def serve_adaptive_schema(request: Request):
+    client_ua = request.headers.get("User-Agent", "unknown")
+    print(f"[SCHEMA] Request from: {client_ua}")
     return {
-        "tool_count": len(MCP_TOOLS_LIST),
+        "version": MCP_VERSION,
         "tools": MCP_TOOLS_LIST
     }
 
