@@ -31,7 +31,7 @@ MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
 CHROME_BINARY = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
-BASE_URL = "https://selenium-mcp.onrender.com"
+BASE_URL = os.getenv("BASE_URL", "https://selenium-mcp.onrender.com")
 
 # ----------------------------------------------------------
 # Root manifest endpoint (for OpenAI Agent Builder)
@@ -191,7 +191,7 @@ def live():
 @app.get("/mcp/schema")
 def get_schema():
     return {
-        "type": "openai_manifest",  # ✅ REQUIRED for Agent Builder
+        "type": "openai_manifest",  # ✅ REQUIRED for OpenAI Agent Builder
         "schema_version": "v1",
         "name_for_human": "Selenium MCP",
         "name_for_model": "selenium",
@@ -199,8 +199,8 @@ def get_schema():
         "description_for_model": "Use this to control a headless Chrome browser.",
         "auth": { "type": "none" },
         "api": {
-            "type": "openapi",
-            "url": f"{BASE_URL}/openapi.yaml"  # or json if using inline
+            "type": "json",
+            "url": f"{BASE_URL}/mcp/internal_schema"  # ✅ self-referential tool listing
         },
         "logo_url": f"{BASE_URL}/logo.png",
         "contact_email": "you@example.com",
@@ -237,6 +237,24 @@ def internal_schema():
             "error": "Failed to load MCP internal schema.",
             "details": str(e)
         }
+
+
+# ----------------------------------------------------------
+# openapi.yaml route
+# ----------------------------------------------------------
+
+
+@app.get("/openapi.yaml")
+def openapi_spec():
+    return Response(yaml.dump({
+        "openapi": "3.0.0",
+        "info": {
+            "title": "Selenium MCP API",
+            "version": MCP_VERSION,
+            "description": "OpenAPI spec for Selenium MCP tools"
+        },
+        "paths": { ... }  # define your 4 tools here
+    }), media_type="application/x-yaml")
 
 
 # ----------------------------------------------------------
