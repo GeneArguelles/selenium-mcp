@@ -535,7 +535,11 @@ def serve_schema(request: Request):
     # ----------------------------------------------------------
     # Always resolve MCP_VERSION dynamically at runtime
     # ----------------------------------------------------------
-    current_version = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION", "v00000000a")
+    current_version = (
+        globals().get("MCP_VERSION")
+        or os.getenv("MCP_VERSION")
+        or "v0.0.0-dev"
+    )
 
     print(f"[INFO] Served unified /mcp/schema (linked to {current_version})")
     print(f"[DEBUG] MCP_VERSION resolved dynamically: {current_version}")
