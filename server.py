@@ -533,26 +533,24 @@ def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder."""
 
     # ----------------------------------------------------------
-    # Ensure MCP_VERSION is always populated at runtime
+    # Always resolve MCP_VERSION dynamically at runtime
     # ----------------------------------------------------------
-    global MCP_VERSION
-    if not MCP_VERSION or MCP_VERSION == "null":
-        MCP_VERSION = os.getenv("MCP_VERSION", "v00000000a")
+    current_version = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION", "v00000000a")
 
-    print(f"[INFO] Served unified /mcp/schema (linked to {MCP_VERSION})")
-    print(f"[DEBUG] MCP_VERSION in scope: {MCP_VERSION}")
+    print(f"[INFO] Served unified /mcp/schema (linked to {current_version})")
+    print(f"[DEBUG] MCP_VERSION resolved dynamically: {current_version}")
 
     # ----------------------------------------------------------
     # Canonical MCP schema object (strictly formatted for Agent Builder)
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
-        "version": MCP_VERSION,          # ✅ Required by Agent Builder
-        "mcp_version": MCP_VERSION,      # ✅ Must not be null
+        "version": current_version,       # ✅ Required by Agent Builder
+        "mcp_version": current_version,   # ✅ Must not be null
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
-            "version": MCP_VERSION,
+            "version": current_version,
             "runtime": platform.python_version(),
         },
         "capabilities": {
@@ -560,7 +558,7 @@ def serve_schema(request: Request):
             "streaming": False,
             "multi_tool": False
         },
-        "tools": MCP_TOOLS_LIST          # ✅ 4 tools defined globally
+        "tools": MCP_TOOLS_LIST           # ✅ 4 tools defined globally
     }
 
     # ----------------------------------------------------------
