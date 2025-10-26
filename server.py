@@ -149,28 +149,57 @@ TOOL_EXECUTION_MAP = {
 
 
 # ==========================================================
-# OpenAI MCP Manifest (required for Agent Builder discovery)
+# OpenAI MCP Manifest (Agent Builder discovery compatible)
 # ==========================================================
-@app.get("/mcp/manifest.json")
+@app.get("/mcp/manifest")
 def serve_manifest():
-    return {
-        "type": "openai_manifest",
-        "schema_version": "v1",
-        "name_for_human": "Selenium MCP",
-        "name_for_model": "selenium",
-        "description_for_human": "Use Selenium to open pages, click elements, extract text, and take screenshots.",
-        "description_for_model": "Plugin for controlling a headless browser via Selenium. Tools include page open, click, text extraction, and screenshots.",
-        "auth": {
-            "type": "none"
-        },
-        "api": {
-            "type": "json",
-            "url": "https://selenium-mcp.onrender.com/mcp/schema"
-        },
-        "logo_url": "https://selenium-mcp.onrender.com/static/logo.png",
-        "contact_email": "youremail@example.com",
-        "legal_info_url": "https://selenium-mcp.onrender.com/legal"
-    }
+    """
+    Always-safe manifest route for OpenAI Agent Builder discovery.
+    Never throws; logs detailed errors to Render console.
+    """
+    from fastapi.responses import JSONResponse
+
+    try:
+        tools = MCP_TOOLS_LIST if "MCP_TOOLS_LIST" in globals() else []
+        manifest = {
+            "type": "mcp_server",
+            "schema_version": "v1",
+            "name_for_human": "Selenium MCP",
+            "name_for_model": "selenium",
+            "description_for_human": (
+                "Headless browser automation tools for OpenAI Agent Builder. "
+                "Provides Selenium-based methods for opening pages, clicking elements, "
+                "extracting text, and taking screenshots."
+            ),
+            "description_for_model": (
+                "MCP server exposing Selenium tools: open_page, click, text, screenshot."
+            ),
+            "auth": {"type": "none"},
+            "api": {
+                "type": "json",
+                "url": "https://selenium-mcp.onrender.com/mcp/schema"
+            },
+            "logo_url": "https://selenium-mcp.onrender.com/static/logo.png",
+            "contact_email": "youremail@example.com",
+            "legal_info_url": "https://selenium-mcp.onrender.com/legal",
+            "tools": tools
+        }
+        print(f"[INFO] /mcp/manifest served successfully ({len(tools)} tools)")
+        return JSONResponse(content=manifest)
+
+    except Exception as e:
+        # Log and fail gracefully
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[ERROR] /mcp/manifest exception: {e}\n{tb}")
+        return JSONResponse(
+            content={
+                "error": "Manifest generation failed",
+                "details": str(e),
+                "trace": tb
+            },
+            status_code=500
+        )
 
 
 # ==========================================================
