@@ -5,6 +5,8 @@
 # Author: Gene Arguelles, LLC
 # ==========================================================
 
+import json     # ✅ Add this once here
+import platform
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -547,9 +549,9 @@ async def serve_schema(request: Request):
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder (failsafe literal version)."""
-
-    import os, platform, json   # 👈 you can add json here safely
-
+    
+    import os, platform, json   # 👈 safe here if top-level import already done, this line is harmless
+        
     # ----------------------------------------------------------
     # Resolve MCP_VERSION robustly at runtime
     # ----------------------------------------------------------
@@ -557,7 +559,7 @@ def serve_schema(request: Request):
     global_version = globals().get("MCP_VERSION", "").strip() if globals().get("MCP_VERSION") else ""
     resolved_version = global_version or env_ver or "v0.0.0-dev"
     resolved_version = str(resolved_version)
-
+    
     # ----------------------------------------------------------
     # Build schema JSON
     # ----------------------------------------------------------
@@ -578,19 +580,19 @@ def serve_schema(request: Request):
         },
         "tools": MCP_TOOLS_LIST
     }
-
+            
     print(
         f"[DEBUG] schema.version={schema.get('version')}  "
         f"mcp_version={schema.get('mcp_version')}  "
         f"global.MCP_VERSION={globals().get('MCP_VERSION')}  "
         f"type={type(schema.get('mcp_version'))}"
     )
-
+            
     # ----------------------------------------------------------
     # 🔒 Force full JSON serialization pre-pass
     # ----------------------------------------------------------
-    safe_json = json.loads(json.dumps(schema, default=str))  # Ensure all values are real JSON-safe strings
-
+    safe_json = json.loads(json.dumps(schema, default=str))
+            
     return JSONResponse(
         content=safe_json,
         headers={
