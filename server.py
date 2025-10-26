@@ -31,6 +31,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==========================================================
+# Constants and Global Declarations
+# ==========================================================
 MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
@@ -50,6 +53,99 @@ def root_manifest():
     }
 
 # ----------------------------------------------------------
+# MCP Manifest Endpoint (GET + POST)
+# ----------------------------------------------------------
+MCP_MANIFEST = {
+    "type": "mcp_server",
+    "schema_version": "v1",
+    "name_for_human": SERVER_NAME,
+    "name_for_model": "selenium",
+    "description_for_human": SERVER_DESC,
+    "description_for_model": "MCP server exposing Selenium tools: open_page, click, text, screenshot.",
+    "auth": {"type": "none"},
+    "api": {"type": "json", "url": f"{BASE_URL}/mcp/schema"},
+    "logo_url": f"{BASE_URL}/static/logo.png",
+    "contact_email": "youremail@example.com",
+    "legal_info_url": f"{BASE_URL}/legal",
+    "tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "The full URL of the page to open (including https://)."
+                        }
+                    },
+                    "required": ["url"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "selenium_click",
+                "description": "Click an element on the page using a CSS selector.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {
+                            "type": "string",
+                            "description": "The CSS selector for the element to click."
+                        }
+                    },
+                    "required": ["selector"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "selenium_screenshot",
+                "description": "Take a screenshot and save it to a file. Returns the local path to the screenshot.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {
+                            "type": "string",
+                            "description": "The desired filename (with .png extension) to save the screenshot."
+                        }
+                    },
+                    "required": ["filename"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "selenium_get_text",
+                "description": "Retrieve visible text content from the page using a CSS selector.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {
+                            "type": "string",
+                            "description": "The CSS selector for the element to extract text from."
+                        }
+                    },
+                    "required": ["selector"]
+                }
+            }
+        }
+    ],
+}
+
+@app.get("/mcp/manifest")
+@app.post("/mcp/manifest")
+async def get_manifest(request: Request):
+    print(f"[INFO] /mcp/manifest served successfully ({len(MCP_MANIFEST['tools'])} tools)")
+    return JSONResponse(content=MCP_MANIFEST)
+
+# ----------------------------------------------------------
 # Health Check — Required for Render Liveness Check
 # ----------------------------------------------------------
 @app.get("/health")
@@ -58,7 +154,6 @@ def health_check():
     Lightweight liveness check used by Render platform
     """
     return {"status": "ok"}
-
 
 # ----------------------------------------------------------
 # MCP_TOOLS_LIST (Strict OpenAI Function Schema)
