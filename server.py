@@ -542,25 +542,25 @@ async def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (self-healing, clean)
+# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (self-healing, hardened)
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
-    """Serve unified schema structure for OpenAI Agent Builder (self-healing)."""
-            
+    """Serve unified schema structure for OpenAI Agent Builder (self-healing, hardened)."""
+
     # ----------------------------------------------------------
     # Actively repair global MCP_VERSION if Render lost it
     # ----------------------------------------------------------
     global MCP_VERSION
     if not globals().get("MCP_VERSION") or globals().get("MCP_VERSION") in [None, "null", ""]:
         env_ver = os.getenv("MCP_VERSION")
-        if env_ver and env_ver not in ["null", ""]:
-            MCP_VERSION = env_ver
-        else:
-            MCP_VERSION = "v0.0.0-dev"
+        MCP_VERSION = env_ver if env_ver and env_ver not in ["null", ""] else "v0.0.0-dev"
         print(f"[PATCH] MCP_VERSION repaired at runtime → {MCP_VERSION}")
 
-    resolved_version = str(MCP_VERSION)
+    # ----------------------------------------------------------
+    # Explicitly hard-bind resolved_version
+    # ----------------------------------------------------------
+    resolved_version = str(globals().get("MCP_VERSION") or "v0.0.0-dev")
 
     # ----------------------------------------------------------
     # Build schema JSON
@@ -568,7 +568,7 @@ def serve_schema(request: Request):
     schema = {
         "type": "mcp_server",
         "version": resolved_version,
-        "mcp_version": resolved_version,
+        "mcp_version": resolved_version,  # ✅ Force identical to resolved_version
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -583,6 +583,9 @@ def serve_schema(request: Request):
         "tools": MCP_TOOLS_LIST
     }
 
+    # ----------------------------------------------------------
+    # Debug trace
+    # ----------------------------------------------------------
     print(
         f"[DEBUG] schema.version={schema.get('version')}  "
         f"mcp_version={schema.get('mcp_version')}  "
