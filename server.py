@@ -179,15 +179,52 @@ def serve_manifest():
 @app.get("/static/manifest.json")
 def serve_static_manifest():
     """
-    Serve a stable, version-pinned manifest for external tools.
-    Mirrors the canonical /mcp/schema endpoint but does not
-    require versioned routing.
+    Serve a stable manifest for external agents.
+    Rebuilds MCP tool list dynamically to ensure non-empty content
+    across async Render container loads.
     """
     print(f"[INFO] Served /static/manifest.json → mirrors /mcp/schema ({MCP_VERSION})")
-    manifest = build_schema_response()
-    # ensure consistent filename response
-    manifest.headers["Content-Disposition"] = 'inline; filename="manifest.json"'
-    return manifest
+
+    # ✅ Force regeneration of MCP tools to prevent empty load on Render
+    from importlib import reload, import_module
+    import sys
+
+    # Re-import self to ensure MCP_TOOLS_LIST is populated
+    module_name = __name__
+    if module_name in sys.modules:
+        reload(sys.modules[module_name])
+    else:
+        import_module(module_name)
+
+    # ✅ Double-check population
+    print(f"[DEBUG] MCP_TOOLS_LIST length (post-reload): {len(MCP_TOOLS_LIST)}")
+
+    schema = {
+        "type": "mcp_server",
+        "version": MCP_VERSION,
+        "mcp_version": MCP_VERSION,
+        "server_info": {
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": MCP_VERSION,
+            "runtime": platform.python_version(),
+        },
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False,
+        },
+        "tools": MCP_TOOLS_LIST,
+    }
+
+    return JSONResponse(
+        content=schema,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Content-Disposition": 'inline; filename="manifest.json"',
+        },
+    )
 
 
 # ----------------------------------------------------------
