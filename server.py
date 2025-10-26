@@ -548,20 +548,14 @@ async def serve_schema(request: Request):
 def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder (failsafe literal version)."""
 
-    import os, platform
+    import os, platform, json   # 👈 you can add json here safely
 
     # ----------------------------------------------------------
     # Resolve MCP_VERSION robustly at runtime
     # ----------------------------------------------------------
     env_ver = os.getenv("MCP_VERSION", "").strip()
     global_version = globals().get("MCP_VERSION", "").strip() if globals().get("MCP_VERSION") else ""
-    resolved_version = (
-        global_version
-        or env_ver
-        or "v0.0.0-dev"
-    )
-
-    # Make sure it's truly a string
+    resolved_version = global_version or env_ver or "v0.0.0-dev"
     resolved_version = str(resolved_version)
 
     # ----------------------------------------------------------
@@ -570,7 +564,7 @@ def serve_schema(request: Request):
     schema = {
         "type": "mcp_server",
         "version": resolved_version,
-        "mcp_version": resolved_version,   # ✅ hard literal copy
+        "mcp_version": resolved_version,
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -592,8 +586,13 @@ def serve_schema(request: Request):
         f"type={type(schema.get('mcp_version'))}"
     )
 
+    # ----------------------------------------------------------
+    # 🔒 Force full JSON serialization pre-pass
+    # ----------------------------------------------------------
+    safe_json = json.loads(json.dumps(schema, default=str))  # Ensure all values are real JSON-safe strings
+
     return JSONResponse(
-        content=schema,
+        content=safe_json,
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate",
             "Pragma": "no-cache"
