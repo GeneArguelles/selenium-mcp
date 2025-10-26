@@ -544,24 +544,24 @@ async def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (failsafe literal version)
+# Canonical /mcp/schema → Full manifest for Agent Builder (final literal-safe)
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
-    """Serve unified schema structure for OpenAI Agent Builder (failsafe literal version)."""
+    """Serve complete schema structure for OpenAI Agent Builder (literal-safe version)."""
     
-    import os, platform, json   # 👈 safe here if top-level import already done, this line is harmless
-        
+    import os, platform, json
+    
     # ----------------------------------------------------------
     # Resolve MCP_VERSION robustly at runtime
     # ----------------------------------------------------------
     env_ver = os.getenv("MCP_VERSION", "").strip()
-    global_version = globals().get("MCP_VERSION", "").strip() if globals().get("MCP_VERSION") else ""
-    resolved_version = global_version or env_ver or "v0.0.0-dev"
+    global_ver = globals().get("MCP_VERSION", "").strip() if globals().get("MCP_VERSION") else ""
+    resolved_version = global_ver or env_ver or "v0.0.0-dev"
     resolved_version = str(resolved_version)
     
     # ----------------------------------------------------------
-    # Build schema JSON
+    # Build schema JSON (with full metadata)
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
@@ -580,19 +580,16 @@ def serve_schema(request: Request):
         },
         "tools": MCP_TOOLS_LIST
     }
-            
-    print(
-        f"[DEBUG] schema.version={schema.get('version')}  "
-        f"mcp_version={schema.get('mcp_version')}  "
-        f"global.MCP_VERSION={globals().get('MCP_VERSION')}  "
-        f"type={type(schema.get('mcp_version'))}"
-    )
-            
+
+    print(f"[DEBUG] schema.version={schema.get('version')}  "
+          f"mcp_version={schema.get('mcp_version')}  "
+          f"global.MCP_VERSION={globals().get('MCP_VERSION')}")
+
     # ----------------------------------------------------------
-    # 🔒 Force full JSON serialization pre-pass
+    # 🔒 JSON-sanitize everything before sending
     # ----------------------------------------------------------
     safe_json = json.loads(json.dumps(schema, default=str))
-            
+
     return JSONResponse(
         content=safe_json,
         headers={
