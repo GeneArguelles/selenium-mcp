@@ -179,25 +179,50 @@ def serve_manifest():
 @app.get("/static/manifest.json")
 def serve_static_manifest():
     """
-    Serve a stable manifest for external agents.
-    Rebuilds MCP tool list dynamically to ensure non-empty content
-    across async Render container loads.
+    Serve a stable manifest for external agents (Render-safe).
+    Embeds tool definitions inline to avoid missing globals.
     """
     print(f"[INFO] Served /static/manifest.json → mirrors /mcp/schema ({MCP_VERSION})")
 
-    # ✅ Force regeneration of MCP tools to prevent empty load on Render
-    from importlib import reload, import_module
-    import sys
-
-    # Re-import self to ensure MCP_TOOLS_LIST is populated
-    module_name = __name__
-    if module_name in sys.modules:
-        reload(sys.modules[module_name])
-    else:
-        import_module(module_name)
-
-    # ✅ Double-check population
-    print(f"[DEBUG] MCP_TOOLS_LIST length (post-reload): {len(MCP_TOOLS_LIST)}")
+    # Inline tool list to ensure no async import issues
+    tools = [
+        {
+            "name": "selenium_open_page",
+            "description": "Open a URL in a headless Chrome browser and return the page title.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string"}},
+                "required": ["url"],
+            },
+        },
+        {
+            "name": "selenium_click",
+            "description": "Click an element by CSS selector.",
+            "parameters": {
+                "type": "object",
+                "properties": {"selector": {"type": "string"}},
+                "required": ["selector"],
+            },
+        },
+        {
+            "name": "selenium_text",
+            "description": "Get text content by CSS selector.",
+            "parameters": {
+                "type": "object",
+                "properties": {"selector": {"type": "string"}},
+                "required": ["selector"],
+            },
+        },
+        {
+            "name": "selenium_screenshot",
+            "description": "Save a PNG screenshot to /tmp and return its path.",
+            "parameters": {
+                "type": "object",
+                "properties": {"filename": {"type": "string"}},
+                "required": ["filename"],
+            },
+        },
+    ]
 
     schema = {
         "type": "mcp_server",
@@ -214,7 +239,7 @@ def serve_static_manifest():
             "streaming": False,
             "multi_tool": False,
         },
-        "tools": MCP_TOOLS_LIST,
+        "tools": tools,
     }
 
     return JSONResponse(
