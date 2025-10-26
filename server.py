@@ -542,35 +542,33 @@ async def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (runtime-safe)
+# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (self-healing, clean)
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
-    """Serve unified schema structure for OpenAI Agent Builder (runtime-safe)."""
+    """Serve unified schema structure for OpenAI Agent Builder (self-healing)."""
 
     # ----------------------------------------------------------
-    # Dynamically resolve MCP_VERSION at request time (never None)
+    # Actively repair global MCP_VERSION if Render lost it
     # ----------------------------------------------------------
-    resolved_version = (
-        os.getenv("MCP_VERSION")
-        or globals().get("MCP_VERSION")
-        or "v0.0.0-dev"
-    )
+    global MCP_VERSION
+    if not globals().get("MCP_VERSION") or globals().get("MCP_VERSION") in [None, "null", ""]:
+        env_ver = os.getenv("MCP_VERSION")
+        if env_ver and env_ver not in ["null", ""]:
+            MCP_VERSION = env_ver
+        else:
+            MCP_VERSION = "v0.0.0-dev"
+        print(f"[PATCH] MCP_VERSION repaired at runtime → {MCP_VERSION}")
 
-    if not isinstance(resolved_version, str):
-        resolved_version = str(resolved_version)
-    if resolved_version.lower() == "null":
-        resolved_version = "v0.0.0-dev"
-
-    print(f"[INFO] /mcp/schema served with runtime version={resolved_version}")
+    resolved_version = str(MCP_VERSION)
 
     # ----------------------------------------------------------
-    # Canonical schema payload for OpenAI Agent Builder
+    # Build schema JSON
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
-        "version": resolved_version,           # ✅ Required by Agent Builder
-        "mcp_version": resolved_version,       # ✅ Always string, never null
+        "version": resolved_version,
+        "mcp_version": resolved_version,
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -585,9 +583,6 @@ def serve_schema(request: Request):
         "tools": MCP_TOOLS_LIST
     }
 
-    # ----------------------------------------------------------
-    # Always return with cache disabled
-    # ----------------------------------------------------------
     return JSONResponse(
         content=schema,
         headers={
