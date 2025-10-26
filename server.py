@@ -542,33 +542,33 @@ async def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (self-healing, hardened)
+# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (bulletproof version)
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
-    """Serve unified schema structure for OpenAI Agent Builder (self-healing, hardened)."""
+    """Serve unified schema structure for OpenAI Agent Builder (bulletproof binding)."""
+
+    import os, platform
 
     # ----------------------------------------------------------
-    # Actively repair global MCP_VERSION if Render lost it
+    # Ensure global MCP_VERSION is present
     # ----------------------------------------------------------
     global MCP_VERSION
-    if not globals().get("MCP_VERSION") or globals().get("MCP_VERSION") in [None, "null", ""]:
-        env_ver = os.getenv("MCP_VERSION")
-        MCP_VERSION = env_ver if env_ver and env_ver not in ["null", ""] else "v0.0.0-dev"
+    if not globals().get("MCP_VERSION") or str(globals().get("MCP_VERSION")).lower() in ["none", "null", ""]:
+        env_ver = os.getenv("MCP_VERSION", "").strip()
+        MCP_VERSION = env_ver if env_ver else "v0.0.0-dev"
         print(f"[PATCH] MCP_VERSION repaired at runtime → {MCP_VERSION}")
 
-    # ----------------------------------------------------------
-    # Explicitly hard-bind resolved_version
-    # ----------------------------------------------------------
-    resolved_version = str(globals().get("MCP_VERSION") or "v0.0.0-dev")
+    # 🚨 Force MCP_VERSION to a string literal
+    resolved_version = str(MCP_VERSION).strip() or "v0.0.0-dev"
 
     # ----------------------------------------------------------
-    # Build schema JSON
+    # Construct schema with hard-coded duplication
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
         "version": resolved_version,
-        "mcp_version": resolved_version,  # ✅ Force identical to resolved_version
+        "mcp_version": str(resolved_version),  # ✅ literal string copy (no variable ref)
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -584,12 +584,13 @@ def serve_schema(request: Request):
     }
 
     # ----------------------------------------------------------
-    # Debug trace
+    # Debug trace to confirm runtime state
     # ----------------------------------------------------------
     print(
         f"[DEBUG] schema.version={schema.get('version')}  "
         f"mcp_version={schema.get('mcp_version')}  "
-        f"global.MCP_VERSION={globals().get('MCP_VERSION')}"
+        f"global.MCP_VERSION={globals().get('MCP_VERSION')}  "
+        f"type={type(schema.get('mcp_version'))}"
     )
 
     return JSONResponse(
