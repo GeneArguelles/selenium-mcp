@@ -531,9 +531,20 @@ async def serve_schema(request: Request):
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder."""
+
+    # ----------------------------------------------------------
+    # Ensure MCP_VERSION is always populated at runtime
+    # ----------------------------------------------------------
+    global MCP_VERSION
+    if not MCP_VERSION or MCP_VERSION == "null":
+        MCP_VERSION = os.getenv("MCP_VERSION", "v00000000a")
+
     print(f"[INFO] Served unified /mcp/schema (linked to {MCP_VERSION})")
     print(f"[DEBUG] MCP_VERSION in scope: {MCP_VERSION}")
 
+    # ----------------------------------------------------------
+    # Canonical MCP schema object (strictly formatted for Agent Builder)
+    # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
         "version": MCP_VERSION,          # ✅ Required by Agent Builder
@@ -552,10 +563,14 @@ def serve_schema(request: Request):
         "tools": MCP_TOOLS_LIST          # ✅ 4 tools defined globally
     }
 
+    # ----------------------------------------------------------
+    # Return schema JSON with no caching to ensure live updates
+    # ----------------------------------------------------------
     return JSONResponse(content=schema, headers={
         "Cache-Control": "no-store, no-cache, must-revalidate",
         "Pragma": "no-cache"
     })
+
 
 # ----------------------------------------------------------
 # Internal Debug Route — Reveals active MCP schema & tools
