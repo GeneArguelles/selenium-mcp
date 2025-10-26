@@ -583,6 +583,9 @@ def serve_schema(request: Request):
         "tools": MCP_TOOLS_LIST
     }
 
+    # 👇 INSERT THIS LINE HERE — right before the return
+    print(f"[DEBUG] schema.version={schema.get('version')}  mcp_version={schema.get('mcp_version')}  global.MCP_VERSION={globals().get('MCP_VERSION')}")
+
     return JSONResponse(
         content=schema,
         headers={
