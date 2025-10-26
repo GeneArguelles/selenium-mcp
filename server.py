@@ -547,7 +547,7 @@ async def serve_schema(request: Request):
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder (self-healing)."""
-        
+            
     # ----------------------------------------------------------
     # Actively repair global MCP_VERSION if Render lost it
     # ----------------------------------------------------------
@@ -559,9 +559,9 @@ def serve_schema(request: Request):
         else:
             MCP_VERSION = "v0.0.0-dev"
         print(f"[PATCH] MCP_VERSION repaired at runtime → {MCP_VERSION}")
-     
+
     resolved_version = str(MCP_VERSION)
-    
+
     # ----------------------------------------------------------
     # Build schema JSON
     # ----------------------------------------------------------
@@ -571,7 +571,7 @@ def serve_schema(request: Request):
         "mcp_version": resolved_version,
         "server_info": {
             "name": SERVER_NAME,
-            "description": SERVER_DESC,   
+            "description": SERVER_DESC,
             "version": resolved_version,
             "runtime": platform.python_version(),
         },
@@ -582,13 +582,13 @@ def serve_schema(request: Request):
         },
         "tools": MCP_TOOLS_LIST
     }
-    
+
     print(
         f"[DEBUG] schema.version={schema.get('version')}  "
         f"mcp_version={schema.get('mcp_version')}  "
         f"global.MCP_VERSION={globals().get('MCP_VERSION')}"
     )
-            
+
     return JSONResponse(
         content=schema,
         headers={
