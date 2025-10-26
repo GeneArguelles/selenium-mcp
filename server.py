@@ -525,45 +525,37 @@ async def serve_schema(request: Request):
     })
 
 
-# ----------------------------------------------------------
-# MCP Schema — Exposes MCP_TOOLS_LIST in strict format
-# ----------------------------------------------------------
-@app.get("/mcp/schema")
-def get_schema():
-    return {
-        "type": "openai_manifest",  # ✅ REQUIRED for OpenAI Agent Builder
-        "schema_version": "v1",
-        "name_for_human": "Selenium MCP",
-        "name_for_model": "selenium",
-        "description_for_human": "Use Selenium to open pages and extract web content.",
-        "description_for_model": "Use this to control a headless Chrome browser.",
-        "auth": { "type": "none" },
-        "api": {
-            "type": "json",
-            "url": f"{BASE_URL}/mcp/internal_schema"  # ✅ self-referential tool listing
+# ==========================================================
+# Canonical /mcp/schema → Primary Agent Builder manifest endpoint
+# ==========================================================
+@app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
+def serve_schema(request: Request):
+    """Serve unified schema structure for OpenAI Agent Builder."""
+    print(f"[INFO] Served unified /mcp/schema (linked to {MCP_VERSION})")
+    print(f"[DEBUG] MCP_VERSION in scope: {MCP_VERSION}")
+
+    schema = {
+        "type": "mcp_server",
+        "version": MCP_VERSION,          # ✅ Required by Agent Builder
+        "mcp_version": MCP_VERSION,      # ✅ Must not be null
+        "server_info": {
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": MCP_VERSION,
+            "runtime": platform.python_version(),
         },
-        "logo_url": f"{BASE_URL}/logo.png",
-        "contact_email": "you@example.com",
-        "legal_info_url": "https://example.com/legal"
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False
+        },
+        "tools": MCP_TOOLS_LIST          # ✅ 4 tools defined globally
     }
 
-@app.post("/")
-def post_root_manifest(request: Request):
-    return root_manifest(request)
-
-
-# ----------------------------------------------------------
-# Tool List — Strict JSON block for Agent Builder
-# ----------------------------------------------------------
-@app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def serve_schema(request: Request):
-    user_agent = request.headers.get("User-Agent", "unknown")
-    print(f"[SCHEMA] Request from: {user_agent}")
-
-    return JSONResponse({
-        "tools": MCP_TOOLS_LIST
+    return JSONResponse(content=schema, headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache"
     })
-
 
 # ----------------------------------------------------------
 # Internal Debug Route — Reveals active MCP schema & tools
