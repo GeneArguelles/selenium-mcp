@@ -542,33 +542,35 @@ async def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (bulletproof version)
+# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (failsafe literal version)
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
-    """Serve unified schema structure for OpenAI Agent Builder (bulletproof binding)."""
+    """Serve unified schema structure for OpenAI Agent Builder (failsafe literal version)."""
 
     import os, platform
 
     # ----------------------------------------------------------
-    # Ensure global MCP_VERSION is present
+    # Resolve MCP_VERSION robustly at runtime
     # ----------------------------------------------------------
-    global MCP_VERSION
-    if not globals().get("MCP_VERSION") or str(globals().get("MCP_VERSION")).lower() in ["none", "null", ""]:
-        env_ver = os.getenv("MCP_VERSION", "").strip()
-        MCP_VERSION = env_ver if env_ver else "v0.0.0-dev"
-        print(f"[PATCH] MCP_VERSION repaired at runtime → {MCP_VERSION}")
+    env_ver = os.getenv("MCP_VERSION", "").strip()
+    global_version = globals().get("MCP_VERSION", "").strip() if globals().get("MCP_VERSION") else ""
+    resolved_version = (
+        global_version
+        or env_ver
+        or "v0.0.0-dev"
+    )
 
-    # 🚨 Force MCP_VERSION to a string literal
-    resolved_version = str(MCP_VERSION).strip() or "v0.0.0-dev"
+    # Make sure it's truly a string
+    resolved_version = str(resolved_version)
 
     # ----------------------------------------------------------
-    # Construct schema with hard-coded duplication
+    # Build schema JSON
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
         "version": resolved_version,
-        "mcp_version": str(resolved_version),  # ✅ literal string copy (no variable ref)
+        "mcp_version": resolved_version,   # ✅ hard literal copy
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -583,9 +585,6 @@ def serve_schema(request: Request):
         "tools": MCP_TOOLS_LIST
     }
 
-    # ----------------------------------------------------------
-    # Debug trace to confirm runtime state
-    # ----------------------------------------------------------
     print(
         f"[DEBUG] schema.version={schema.get('version')}  "
         f"mcp_version={schema.get('mcp_version')}  "
