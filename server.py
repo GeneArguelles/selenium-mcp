@@ -32,6 +32,11 @@ app.add_middleware(
 )
 
 # ==========================================================
+# Failsafe: Ensure MCP_VERSION always initialized at import
+# ==========================================================
+MCP_VERSION = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION") or "v20251024c"
+
+# ==========================================================
 # Constants and Global Declarations
 # ==========================================================
 MCP_VERSION = "v20251024c"
