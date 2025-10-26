@@ -11,8 +11,19 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-import os
 
+# ==========================================================
+# Failsafe: guarantee MCP_VERSION always has a value at import time
+# ==========================================================
+import os, datetime
+
+if "MCP_VERSION" not in globals() or not globals().get("MCP_VERSION"):
+    # try environment first, else auto-generate daily version tag
+    MCP_VERSION = os.getenv(
+        "MCP_VERSION",
+        f"v{datetime.date.today().strftime('%Y%m%d')}a"
+    )
+    print(f"[BOOT] MCP_VERSION pre-initialized as {MCP_VERSION}")
 
 # ----------------------------------------------------------
 # Imports and FastAPI app setup
@@ -538,13 +549,15 @@ def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder."""
 
     # ----------------------------------------------------------
-    # Always resolve MCP_VERSION dynamically at runtime
+    # Resolve MCP_VERSION dynamically and assert non-null
     # ----------------------------------------------------------
     current_version = (
         globals().get("MCP_VERSION")
         or os.getenv("MCP_VERSION")
         or "v0.0.0-dev"
     )
+    if not current_version or current_version == "null":
+        current_version = "v0.0.0-dev"
 
     print(f"[INFO] Served unified /mcp/schema (linked to {current_version})")
     print(f"[DEBUG] MCP_VERSION resolved dynamically: {current_version}")
@@ -554,8 +567,8 @@ def serve_schema(request: Request):
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
-        "version": current_version,       # ✅ Required by Agent Builder
-        "mcp_version": current_version,   # ✅ Must not be null
+        "version": current_version,
+        "mcp_version": str(current_version),  # ✅ enforce explicit string type
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -567,7 +580,7 @@ def serve_schema(request: Request):
             "streaming": False,
             "multi_tool": False
         },
-        "tools": MCP_TOOLS_LIST           # ✅ 4 tools defined globally
+        "tools": MCP_TOOLS_LIST
     }
 
     # ----------------------------------------------------------
