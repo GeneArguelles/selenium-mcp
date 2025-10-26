@@ -252,6 +252,85 @@ def serve_static_manifest():
     )
 
 
+# ==========================================================
+# MCP Static Manifest (Safe path alias)
+# ==========================================================
+@app.get("/mcp/manifest")
+def serve_mcp_manifest():
+    """
+    Serve version-pinned manifest for MCP discovery.
+    Uses /mcp/manifest instead of /static/manifest.json
+    to avoid FastAPI StaticFiles conflicts.
+    """
+    print(f"[INFO] Served /mcp/manifest → stable schema export ({MCP_VERSION})")
+
+    tools = [
+        {
+            "name": "selenium_open_page",
+            "description": "Open a URL in a headless Chrome browser and return the page title.",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string"}},
+                "required": ["url"],
+            },
+        },
+        {
+            "name": "selenium_click",
+            "description": "Click an element by CSS selector.",
+            "parameters": {
+                "type": "object",
+                "properties": {"selector": {"type": "string"}},
+                "required": ["selector"],
+            },
+        },
+        {
+            "name": "selenium_text",
+            "description": "Get text content by CSS selector.",
+            "parameters": {
+                "type": "object",
+                "properties": {"selector": {"type": "string"}},
+                "required": ["selector"],
+            },
+        },
+        {
+            "name": "selenium_screenshot",
+            "description": "Save a PNG screenshot to /tmp and return its path.",
+            "parameters": {
+                "type": "object",
+                "properties": {"filename": {"type": "string"}},
+                "required": ["filename"],
+            },
+        },
+    ]
+
+    schema = {
+        "type": "mcp_server",
+        "version": MCP_VERSION,
+        "mcp_version": MCP_VERSION,
+        "server_info": {
+            "name": SERVER_NAME,
+            "description": SERVER_DESC,
+            "version": MCP_VERSION,
+            "runtime": platform.python_version(),
+        },
+        "capabilities": {
+            "invocation": True,
+            "streaming": False,
+            "multi_tool": False,
+        },
+        "tools": tools,
+    }
+
+    return JSONResponse(
+        content=schema,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "Content-Disposition": 'inline; filename="manifest.json"',
+        },
+    )
+
+
 # ----------------------------------------------------------
 # Invocation Schema Input Model
 # ----------------------------------------------------------
