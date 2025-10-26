@@ -43,18 +43,18 @@ app.add_middleware(
 )
 
 # ==========================================================
-# Failsafe: Ensure MCP_VERSION always initialized at import
-# ==========================================================
-MCP_VERSION = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION") or "v20251024c"
-
-# ==========================================================
-# Constants and Global Declarations
+# Global constants — must be defined before route declarations
 # ==========================================================
 MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
 CHROME_BINARY = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
 BASE_URL = os.getenv("BASE_URL", "https://selenium-mcp.onrender.com")
+
+# ==========================================================
+# Failsafe: Ensure MCP_VERSION always initialized at import
+# ==========================================================
+MCP_VERSION = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION") or "v20251024c"
 
 # ----------------------------------------------------------
 # Root manifest endpoint (for OpenAI Agent Builder)
