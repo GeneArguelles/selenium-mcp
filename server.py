@@ -542,37 +542,39 @@ async def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /mcp/schema → Primary Agent Builder manifest endpoint
+# Canonical /mcp/schema → Primary Agent Builder manifest endpoint (runtime-safe)
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
-    """Serve unified schema structure for OpenAI Agent Builder."""
+    """Serve unified schema structure for OpenAI Agent Builder (runtime-safe)."""
 
     # ----------------------------------------------------------
-    # Resolve MCP_VERSION dynamically and assert non-null
+    # Dynamically resolve MCP_VERSION at request time (never None)
     # ----------------------------------------------------------
-    current_version = (
-        globals().get("MCP_VERSION")
-        or os.getenv("MCP_VERSION")
+    resolved_version = (
+        os.getenv("MCP_VERSION")
+        or globals().get("MCP_VERSION")
         or "v0.0.0-dev"
     )
-    if not current_version or current_version == "null":
-        current_version = "v0.0.0-dev"
 
-    print(f"[INFO] Served unified /mcp/schema (linked to {current_version})")
-    print(f"[DEBUG] MCP_VERSION resolved dynamically: {current_version}")
+    if not isinstance(resolved_version, str):
+        resolved_version = str(resolved_version)
+    if resolved_version.lower() == "null":
+        resolved_version = "v0.0.0-dev"
+
+    print(f"[INFO] /mcp/schema served with runtime version={resolved_version}")
 
     # ----------------------------------------------------------
-    # Canonical MCP schema object (strictly formatted for Agent Builder)
+    # Canonical schema payload for OpenAI Agent Builder
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
-        "version": current_version,
-        "mcp_version": str(current_version),  # ✅ enforce explicit string type
+        "version": resolved_version,           # ✅ Required by Agent Builder
+        "mcp_version": resolved_version,       # ✅ Always string, never null
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
-            "version": current_version,
+            "version": resolved_version,
             "runtime": platform.python_version(),
         },
         "capabilities": {
@@ -584,12 +586,15 @@ def serve_schema(request: Request):
     }
 
     # ----------------------------------------------------------
-    # Return schema JSON with no caching to ensure live updates
+    # Always return with cache disabled
     # ----------------------------------------------------------
-    return JSONResponse(content=schema, headers={
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Pragma": "no-cache"
-    })
+    return JSONResponse(
+        content=schema,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache"
+        }
+    )
 
 
 # ----------------------------------------------------------
