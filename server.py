@@ -565,14 +565,14 @@ def serve_schema(request: Request):
     # ----------------------------------------------------------
     # Resolve version deterministically
     # ----------------------------------------------------------
-    resolved_version = (
-        str(globals().get("MCP_VERSION"))
-        or str(os.getenv("MCP_VERSION"))
+    resolved_version = str(
+        globals().get("MCP_VERSION")
+        or os.getenv("MCP_VERSION")
         or "v0.0.0-dev"
     )
 
     # ----------------------------------------------------------
-    # Build schema (literal-safe)
+    # Build canonical schema dict
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
@@ -593,7 +593,7 @@ def serve_schema(request: Request):
     }
 
     # ----------------------------------------------------------
-    # 🔒 Deep sanitize all fields (replace None → string)
+    # 🔒 Enforce literal safety for all values
     # ----------------------------------------------------------
     def literalize(obj):
         if isinstance(obj, dict):
@@ -605,50 +605,40 @@ def serve_schema(request: Request):
     schema = literalize(schema)
 
     # ----------------------------------------------------------
-    # Log trace values
+    # 🧱 Final literal enforcement before serialization
+    # ----------------------------------------------------------
+    schema["version"] = str(resolved_version)
+    schema["mcp_version"] = str(resolved_version)
+    if isinstance(schema.get("server_info"), dict):
+        schema["server_info"]["version"] = str(resolved_version)
+
+    # ----------------------------------------------------------
+    # 🔍 Diagnostic trace output (guaranteed visible in Render)
     # ----------------------------------------------------------
     logger = logging.getLogger("uvicorn.error")
-    trace_line = (
-        f"[TRACE] schema.version={schema.get('version')} "
-        f"mcp_version={schema.get('mcp_version')} "
-        f"server_info.version={schema['server_info'].get('version')} "
-        f"GLOBAL={globals().get('MCP_VERSION')} ENV={os.getenv('MCP_VERSION')}"
-    )
-    logger.info(trace_line)
+    trace_data = {
+        "version": schema.get("version"),
+        "mcp_version": schema.get("mcp_version"),
+        "server_info.version": schema.get("server_info", {}).get("version"),
+        "GLOBAL": globals().get("MCP_VERSION"),
+        "ENV": os.getenv("MCP_VERSION"),
+    }
+    logger.info(f"[TRACE-FINAL] {json.dumps(trace_data, indent=2)}")
     sys.stdout.flush()
 
-    print(
-        "[TRACE-FINAL] schema dump before return →",
-        json.dumps(schema, indent=2),
-        flush=True,
-        file=sys.stdout
-    )
-    sys.stdout.flush()
-    
     # ----------------------------------------------------------
-    # 🧱 Final literal enforcement (pre-serialization safety)
+    # ✅ Serialize safely (ensure no None survives)
     # ----------------------------------------------------------
-    schema["version"] = str(schema.get("version") or resolved_version)
-    schema["mcp_version"] = str(schema.get("mcp_version") or resolved_version)
-    if isinstance(schema.get("server_info"), dict):
-        schema["server_info"]["version"] = str(
-            schema["server_info"].get("version") or resolved_version
-        )
+    safe_json = json.loads(json.dumps(schema, default=str))
 
-    # Force literal-safe copy to JSON
-    import json
-    schema = json.loads(json.dumps(schema, default=str))
-
-    # ----------------------------------------------------------
-    # Return response
-    # ----------------------------------------------------------
     return JSONResponse(
-        content=schema,
+        content=safe_json,
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate",
             "Pragma": "no-cache",
         },
     )
+
 
 # ----------------------------------------------------------
 # Internal Debug Route — Reveals active MCP schema & tools
