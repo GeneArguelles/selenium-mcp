@@ -626,6 +626,20 @@ def serve_schema(request: Request):
     sys.stdout.flush()
     
     # ----------------------------------------------------------
+    # 🧱 Final literal enforcement (pre-serialization safety)
+    # ----------------------------------------------------------
+    schema["version"] = str(schema.get("version") or resolved_version)
+    schema["mcp_version"] = str(schema.get("mcp_version") or resolved_version)
+    if isinstance(schema.get("server_info"), dict):
+        schema["server_info"]["version"] = str(
+            schema["server_info"].get("version") or resolved_version
+        )
+
+    # Force literal-safe copy to JSON
+    import json
+    schema = json.loads(json.dumps(schema, default=str))
+
+    # ----------------------------------------------------------
     # Return response
     # ----------------------------------------------------------
     return JSONResponse(
