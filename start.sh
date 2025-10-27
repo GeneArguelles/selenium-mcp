@@ -7,6 +7,11 @@ echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
 
+export MCP_VERSION="v$(date +%Y%m%d)a"
+echo "[INFO] MCP_VERSION set to $MCP_VERSION"
+
+python3 -m uvicorn server:app --host 0.0.0.0 --port 10000
+
 # === Setup environment
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_DIR="logs/deploy_$TIMESTAMP"
