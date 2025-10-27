@@ -64,6 +64,14 @@ for ENDPOINT in "/mcp/schema" "/live" "/health"; do
 done
 
 # ----------------------------------------------------------
+# 4.5️⃣ Schema Version Verification (Compact Deploy & Verify)
+# ----------------------------------------------------------
+echo "[VERIFY] Checking MCP schema version fields..."
+sleep 5  # short grace period for MCP_VERSION registration
+curl -s "$BASE_URL/mcp/schema" | jq '.version, .mcp_version, .server_info.version'
+echo "[INFO] Schema verification complete."
+
+# ----------------------------------------------------------
 # 5️⃣ Post-Deploy Invoke Test
 # ----------------------------------------------------------
 echo "[TEST] Running MCP invoke test..."
