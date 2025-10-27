@@ -550,24 +550,25 @@ async def serve_schema(request: Request):
 
 
 # ==========================================================
-# Canonical /mcp/schema → Full manifest for Agent Builder (final literal-safe)
+# Canonical /mcp/schema → Primary Agent Builder manifest endpoint
 # ==========================================================
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
-    """Serve complete schema structure for OpenAI Agent Builder (literal-safe version)."""
-    
+    """Serve unified schema structure for OpenAI Agent Builder (literal-safe version)."""
+
     import os, platform, json
-    
+
     # ----------------------------------------------------------
-    # Resolve MCP_VERSION robustly at runtime
+    # Resolve version value robustly
     # ----------------------------------------------------------
+    global MCP_VERSION
     env_ver = os.getenv("MCP_VERSION", "").strip()
     global_ver = globals().get("MCP_VERSION", "").strip() if globals().get("MCP_VERSION") else ""
     resolved_version = global_ver or env_ver or "v0.0.0-dev"
     resolved_version = str(resolved_version)
-    
+
     # ----------------------------------------------------------
-    # Build schema JSON (with full metadata)
+    # Build schema dictionary
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
@@ -587,20 +588,25 @@ def serve_schema(request: Request):
         "tools": MCP_TOOLS_LIST
     }
 
-    print(f"[DEBUG] schema.version={schema.get('version')}  "
-          f"mcp_version={schema.get('mcp_version')}  "
-          f"global.MCP_VERSION={globals().get('MCP_VERSION')}")
+    print(
+        f"[DEBUG] schema.version={schema.get('version')}  "
+        f"mcp_version={schema.get('mcp_version')}  "
+        f"global.MCP_VERSION={globals().get('MCP_VERSION')}"
+    )
 
     # ----------------------------------------------------------
     # 🩹 Force full regeneration and injection of version values
     # ----------------------------------------------------------
-    resolved_version = str(MCP_VERSION)
+    if not resolved_version or resolved_version.lower() in ["none", "null", ""]:
+        resolved_version = "v0.0.0-dev"
+
     schema["version"] = resolved_version
     schema["mcp_version"] = resolved_version
-    if "server_info" in schema:
-        schema["server_info"]["version"] = resolved_version
+    schema["server_info"]["version"] = resolved_version
 
-    # Force JSON serialization to prevent stale values
+    # ----------------------------------------------------------
+    # 🔒 JSON serialization pre-pass to eliminate stale data
+    # ----------------------------------------------------------
     safe_json = json.loads(json.dumps(schema, default=str))
 
     return JSONResponse(
@@ -610,6 +616,7 @@ def serve_schema(request: Request):
             "Pragma": "no-cache"
         }
     )
+
 
 
 # ----------------------------------------------------------
