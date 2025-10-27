@@ -613,6 +613,12 @@ def serve_schema(request: Request):
     logger.info(trace_line)
     sys.stdout.flush()
 
+    print(
+        "[TRACE-FINAL] schema dump before return →",
+        json.dumps(schema, indent=2),
+        flush=True
+    )
+    
     # ----------------------------------------------------------
     # Return response
     # ----------------------------------------------------------
