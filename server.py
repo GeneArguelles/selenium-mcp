@@ -598,21 +598,28 @@ def serve_schema(request: Request):
     # ----------------------------------------------------------
     resolved_version = str(globals().get("MCP_VERSION") or os.getenv("MCP_VERSION", "v-unknown"))
 
-    # update top-level and nested version fields
+    # Ensure deep injection of version fields
     schema["version"] = resolved_version
     schema["mcp_version"] = resolved_version
 
-    server_info = schema.get("server_info", {})
-    server_info.update({
+    if "server_info" not in schema or not isinstance(schema["server_info"], dict):
+        schema["server_info"] = {}
+
+    schema["server_info"].update({
+        "name": schema["server_info"].get("name", SERVER_NAME),
+        "description": schema["server_info"].get("description", SERVER_DESC),
         "version": resolved_version,
         "runtime": platform.python_version(),
     })
-    schema["server_info"] = server_info
+
+    # explicitly coerce to literal-safe string values
+    schema["mcp_version"] = str(schema["mcp_version"])
+    schema["server_info"]["version"] = str(schema["server_info"]["version"])
 
     print(
         f"[DEBUG] schema.version={schema.get('version')}  "
         f"mcp_version={schema.get('mcp_version')}  "
-        f"server_info.version={server_info.get('version')}  "
+        f"server_info.version={schema['server_info'].get('version')}  "
         f"global.MCP_VERSION={globals().get('MCP_VERSION')}",
         flush=True
     )
