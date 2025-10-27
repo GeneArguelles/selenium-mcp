@@ -34,6 +34,13 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 # ----------------------------------------------------------
+# ✅ Safe global getter for MCP version (ADD HERE)
+# ----------------------------------------------------------
+def get_mcp_version():
+    """Safe global getter for MCP version across endpoints."""
+    return globals().get("MCP_VERSION") or os.getenv("MCP_VERSION") or "v0.0.0-dev"
+
+# ----------------------------------------------------------
 # Imports and FastAPI app setup
 # ----------------------------------------------------------
 from fastapi.middleware.cors import CORSMiddleware
@@ -378,7 +385,7 @@ def serve_static_manifest():
     schema = {
         "type": "mcp_server",
         "version": MCP_VERSION,
-        "mcp_version": MCP_VERSION,
+        "mcp_version": get_mcp_version(),
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -457,7 +464,7 @@ def serve_mcp_manifest():
     schema = {
         "type": "mcp_server",
         "version": MCP_VERSION,
-        "mcp_version": MCP_VERSION,
+        "mcp_version": get_mcp_version(),
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
@@ -496,7 +503,7 @@ class InvokeRequest(BaseModel):
 def root_manifest(request: Request):
     return {
         "type": "mcp_server",
-        "mcp_version": MCP_VERSION,
+        "mcp_version": get_mcp_version(),
         "version": MCP_VERSION,
         "server_info": {
             "name": SERVER_NAME,
@@ -517,7 +524,7 @@ def root_manifest(request: Request):
 def post_root_manifest(request: Request):
     return {
         "type": "mcp_server",
-        "mcp_version": MCP_VERSION,
+        "mcp_version": get_mcp_version(),
         "version": MCP_VERSION,
         "server_info": {
             "name": SERVER_NAME,
