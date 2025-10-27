@@ -1,31 +1,37 @@
-# server.py
+#!/usr/bin/env python3
 # ==========================================================
 # Selenium MCP — Headless Browser Automation (FastAPI MCP)
-# Version: v20251024-FULL
+# Version: v20251027-FULL
 # Author: Gene Arguelles, LLC
 # ==========================================================
+import os, datetime, platform, logging
+
+# ----------------------------------------------------------
+# ✅ Canonical MCP_VERSION bootstrap
+# Ensures deterministic version tag across all workers
+# ----------------------------------------------------------
+if "MCP_VERSION" not in globals() or not globals().get("MCP_VERSION"):
+    MCP_VERSION = os.getenv(
+        "MCP_VERSION",
+        f"v{datetime.date.today().strftime('%Y%m%d')}a"
+    )
+    print(f"[BOOT] MCP_VERSION pre-initialized as {MCP_VERSION}")
+
+if not isinstance(MCP_VERSION, str) or not MCP_VERSION.startswith("v"):
+    MCP_VERSION = f"v{datetime.date.today().strftime('%Y%m%d')}a"
+    print(f"[BOOT] MCP_VERSION repaired to {MCP_VERSION}")
+
+print(f"[INFO] Launching MCP Server (version={MCP_VERSION})")
 
 import json     # ✅ Add this once here
 import platform
+import sys
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-
-# ==========================================================
-# Failsafe: guarantee MCP_VERSION always has a value at import time
-# ==========================================================
-import os, datetime
-
-if "MCP_VERSION" not in globals() or not globals().get("MCP_VERSION"):
-    # try environment first, else auto-generate daily version tag
-    MCP_VERSION = os.getenv(
-        "MCP_VERSION",
-        f"v{datetime.date.today().strftime('%Y%m%d')}a"
-    )
-    print(f"[BOOT] MCP_VERSION pre-initialized as {MCP_VERSION}")
 
 # ----------------------------------------------------------
 # Imports and FastAPI app setup
@@ -61,8 +67,6 @@ print(f"[BOOT] FORCE_REBUILD_TAG = {FORCE_REBUILD_TAG}")
 # ==========================================================
 # Failsafe: Ensure MCP_VERSION always initialized at import
 # ==========================================================
-MCP_VERSION = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION") or "v20251024c"
-
 # ----------------------------------------------------------
 # Root manifest endpoint (for OpenAI Agent Builder)
 # ----------------------------------------------------------
@@ -616,8 +620,10 @@ def serve_schema(request: Request):
     print(
         "[TRACE-FINAL] schema dump before return →",
         json.dumps(schema, indent=2),
-        flush=True
+        flush=True,
+        file=sys.stdout
     )
+    sys.stdout.flush()
     
     # ----------------------------------------------------------
     # Return response
