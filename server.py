@@ -47,7 +47,6 @@ app.add_middleware(
 # ==========================================================
 # Global constants — must be defined before route declarations
 # ==========================================================
-MCP_VERSION = "v20251024c"
 SERVER_NAME = "Selenium MCP"
 SERVER_DESC = "Headless browser automation tools for OpenAI Agent Builder."
 CHROME_BINARY = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
@@ -613,6 +612,22 @@ def serve_schema(request: Request):
           f"ENV={os.getenv('MCP_VERSION')}  "
           f"GLOBAL={globals().get('MCP_VERSION')}  "
           f"TYPE={type(resolved_version)}")
+
+    # ----------------------------------------------------------
+    # 🔎 TRACE: Confirm version propagation via FastAPI logger
+    # ----------------------------------------------------------
+    import logging, sys
+    logger = logging.getLogger("uvicorn.error")
+    trace_line = (
+        f"[TRACE] RESOLVED={resolved_version}  "
+        f"ENV={os.getenv('MCP_VERSION')}  "
+        f"GLOBAL={globals().get('MCP_VERSION')}  "
+        f"TYPE={type(resolved_version)}"
+    )
+    # log through Uvicorn’s logger (guaranteed to appear in Render logs)
+    logger.info(trace_line)
+    sys.stdout.flush()
+
 
     return JSONResponse(
         content=safe_json,
