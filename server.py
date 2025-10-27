@@ -554,20 +554,21 @@ async def serve_schema(request: Request):
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder (literal-safe version)."""
+    import os, platform, json, logging, sys
 
-    import os, platform, json
-
-    # ----------------------------------------------------------
-    # Resolve version value robustly
-    # ----------------------------------------------------------
     global MCP_VERSION
-    env_ver = os.getenv("MCP_VERSION", "").strip()
-    global_ver = globals().get("MCP_VERSION", "").strip() if globals().get("MCP_VERSION") else ""
-    resolved_version = global_ver or env_ver or "v0.0.0-dev"
-    resolved_version = str(resolved_version)
 
     # ----------------------------------------------------------
-    # Build schema dictionary
+    # Resolve version deterministically
+    # ----------------------------------------------------------
+    resolved_version = (
+        str(globals().get("MCP_VERSION"))
+        or str(os.getenv("MCP_VERSION"))
+        or "v0.0.0-dev"
+    )
+
+    # ----------------------------------------------------------
+    # Build schema (literal-safe)
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
@@ -582,83 +583,46 @@ def serve_schema(request: Request):
         "capabilities": {
             "invocation": True,
             "streaming": False,
-            "multi_tool": False
+            "multi_tool": False,
         },
-        "tools": MCP_TOOLS_LIST
+        "tools": MCP_TOOLS_LIST,
     }
 
-    print(
-        f"[DEBUG] schema.version={schema.get('version')}  "
-        f"mcp_version={schema.get('mcp_version')}  "
-        f"global.MCP_VERSION={globals().get('MCP_VERSION')}"
-    )
+    # ----------------------------------------------------------
+    # 🔒 Deep sanitize all fields (replace None → string)
+    # ----------------------------------------------------------
+    def literalize(obj):
+        if isinstance(obj, dict):
+            return {k: literalize(v) for k, v in obj.items()}
+        elif obj is None:
+            return "v0.0.0-dev"
+        return str(obj)
+    
+    schema = literalize(schema)
 
     # ----------------------------------------------------------
-    # 🧩 Force-inject runtime version values (no stale fields)
+    # Log trace values
     # ----------------------------------------------------------
-    resolved_version = str(globals().get("MCP_VERSION") or os.getenv("MCP_VERSION", "v-unknown"))
-
-    # Ensure deep injection of version fields
-    schema["version"] = resolved_version
-    schema["mcp_version"] = resolved_version
-
-    if "server_info" not in schema or not isinstance(schema["server_info"], dict):
-        schema["server_info"] = {}
-
-    schema["server_info"].update({
-        "name": schema["server_info"].get("name", SERVER_NAME),
-        "description": schema["server_info"].get("description", SERVER_DESC),
-        "version": resolved_version,
-        "runtime": platform.python_version(),
-    })
-
-    # explicitly coerce to literal-safe string values
-    schema["mcp_version"] = str(schema["mcp_version"])
-    schema["server_info"]["version"] = str(schema["server_info"]["version"])
-
-    print(
-        f"[DEBUG] schema.version={schema.get('version')}  "
-        f"mcp_version={schema.get('mcp_version')}  "
-        f"server_info.version={schema['server_info'].get('version')}  "
-        f"global.MCP_VERSION={globals().get('MCP_VERSION')}",
-        flush=True
-    )
-
-    # ----------------------------------------------------------
-    # 🔒 JSON serialization pre-pass to eliminate stale data
-    # ----------------------------------------------------------
-    safe_json = json.loads(json.dumps(schema, default=str))
-
-    print(f"[TRACE] RESOLVED={resolved_version}  "
-          f"ENV={os.getenv('MCP_VERSION')}  "
-          f"GLOBAL={globals().get('MCP_VERSION')}  "
-          f"TYPE={type(resolved_version)}")
-
-    # ----------------------------------------------------------
-    # 🔎 TRACE: Confirm version propagation via FastAPI logger
-    # ----------------------------------------------------------
-    import logging, sys
     logger = logging.getLogger("uvicorn.error")
     trace_line = (
-        f"[TRACE] RESOLVED={resolved_version}  "
-        f"ENV={os.getenv('MCP_VERSION')}  "
-        f"GLOBAL={globals().get('MCP_VERSION')}  "
-        f"TYPE={type(resolved_version)}"
+        f"[TRACE] schema.version={schema.get('version')} "
+        f"mcp_version={schema.get('mcp_version')} "
+        f"server_info.version={schema['server_info'].get('version')} "
+        f"GLOBAL={globals().get('MCP_VERSION')} ENV={os.getenv('MCP_VERSION')}"
     )
-    # log through Uvicorn’s logger (guaranteed to appear in Render logs)
     logger.info(trace_line)
     sys.stdout.flush()
 
-
+    # ----------------------------------------------------------
+    # Return response
+    # ----------------------------------------------------------
     return JSONResponse(
-        content=safe_json,
+        content=schema,
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Pragma": "no-cache"
-        }
+            "Pragma": "no-cache",
+        },
     )
-
-
 
 # ----------------------------------------------------------
 # Internal Debug Route — Reveals active MCP schema & tools
