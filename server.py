@@ -609,6 +609,11 @@ def serve_schema(request: Request):
     # ----------------------------------------------------------
     safe_json = json.loads(json.dumps(schema, default=str))
 
+    print(f"[TRACE] RESOLVED={resolved_version}  "
+          f"ENV={os.getenv('MCP_VERSION')}  "
+          f"GLOBAL={globals().get('MCP_VERSION')}  "
+          f"TYPE={type(resolved_version)}")
+
     return JSONResponse(
         content=safe_json,
         headers={
