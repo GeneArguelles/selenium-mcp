@@ -54,6 +54,12 @@ CHROME_BINARY = "/opt/render/project/src/.local/chrome/chrome-linux/chrome"
 BASE_URL = os.getenv("BASE_URL", "https://selenium-mcp.onrender.com")
 
 # ==========================================================
+# Force cache busting on Render build layer
+# ==========================================================
+FORCE_REBUILD_TAG = "v20251027b"  # ⬅️ bump this every time you need a new container
+print(f"[BOOT] FORCE_REBUILD_TAG = {FORCE_REBUILD_TAG}")
+
+# ==========================================================
 # Failsafe: Ensure MCP_VERSION always initialized at import
 # ==========================================================
 MCP_VERSION = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION") or "v20251024c"
