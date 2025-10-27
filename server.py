@@ -591,12 +591,6 @@ def serve_schema(request: Request):
           f"mcp_version={schema.get('mcp_version')}  "
           f"global.MCP_VERSION={globals().get('MCP_VERSION')}")
 
-        print(
-        f"[DEBUG] schema.version={schema.get('version')}  "
-        f"mcp_version={schema.get('mcp_version')}  "
-        f"global.MCP_VERSION={globals().get('MCP_VERSION')}"
-    )
-
     # ----------------------------------------------------------
     # 🩹 Force full regeneration and injection of version values
     # ----------------------------------------------------------
@@ -607,7 +601,6 @@ def serve_schema(request: Request):
         schema["server_info"]["version"] = resolved_version
 
     # Force JSON serialization to prevent stale values
-    import json
     safe_json = json.loads(json.dumps(schema, default=str))
 
     return JSONResponse(
