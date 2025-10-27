@@ -594,14 +594,28 @@ def serve_schema(request: Request):
     )
 
     # ----------------------------------------------------------
-    # 🩹 Force full regeneration and injection of version values
+    # 🧩 Force-inject runtime version values (no stale fields)
     # ----------------------------------------------------------
-    if not resolved_version or resolved_version.lower() in ["none", "null", ""]:
-        resolved_version = "v0.0.0-dev"
+    resolved_version = str(globals().get("MCP_VERSION") or os.getenv("MCP_VERSION", "v-unknown"))
 
+    # update top-level and nested version fields
     schema["version"] = resolved_version
     schema["mcp_version"] = resolved_version
-    schema["server_info"]["version"] = resolved_version
+
+    server_info = schema.get("server_info", {})
+    server_info.update({
+        "version": resolved_version,
+        "runtime": platform.python_version(),
+    })
+    schema["server_info"] = server_info
+
+    print(
+        f"[DEBUG] schema.version={schema.get('version')}  "
+        f"mcp_version={schema.get('mcp_version')}  "
+        f"server_info.version={server_info.get('version')}  "
+        f"global.MCP_VERSION={globals().get('MCP_VERSION')}",
+        flush=True
+    )
 
     # ----------------------------------------------------------
     # 🔒 JSON serialization pre-pass to eliminate stale data
