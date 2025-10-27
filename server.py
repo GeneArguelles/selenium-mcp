@@ -559,8 +559,18 @@ async def serve_schema(request: Request):
 def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder (literal-safe version)."""
     import os, platform, json, logging, sys
+    from copy import deepcopy
 
     global MCP_VERSION
+
+    # ----------------------------------------------------------
+    # 🚧 Defensive: Reset any global schema shadowing
+    # ----------------------------------------------------------
+    if "schema" in globals():
+        try:
+            del globals()["schema"]
+        except Exception:
+            pass
 
     # ----------------------------------------------------------
     # Resolve version deterministically
@@ -613,7 +623,7 @@ def serve_schema(request: Request):
         schema["server_info"]["version"] = str(resolved_version)
 
     # ----------------------------------------------------------
-    # 🔍 Diagnostic trace output (guaranteed visible in Render)
+    # 🔍 Diagnostic trace output (guaranteed visible in Render logs)
     # ----------------------------------------------------------
     logger = logging.getLogger("uvicorn.error")
     trace_data = {
@@ -627,9 +637,15 @@ def serve_schema(request: Request):
     sys.stdout.flush()
 
     # ----------------------------------------------------------
-    # ✅ Serialize safely (ensure no None survives)
+    # ✅ Safe serialization via deepcopy
     # ----------------------------------------------------------
-    safe_json = json.loads(json.dumps(schema, default=str))
+    payload = deepcopy(schema)
+    payload["version"] = resolved_version
+    payload["mcp_version"] = resolved_version
+    if "server_info" in payload and isinstance(payload["server_info"], dict):
+        payload["server_info"]["version"] = resolved_version
+
+    safe_json = json.loads(json.dumps(payload, default=str))
 
     return JSONResponse(
         content=safe_json,
