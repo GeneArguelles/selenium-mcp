@@ -52,11 +52,23 @@ echo "$DIVIDER"
 
 # === 3️⃣ Tool Invocation Check ===
 echo -e "${YELLOW}3️⃣ Tool invocation (/mcp/invoke)...${RESET}"
-curl -s -X POST "$BASE_URL/mcp/invoke" \
+
+# Send POST request and capture status code + response
+HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST "$BASE_URL/mcp/invoke" \
   -H "Content-Type: application/json" \
-  -d '{"tool":"selenium_open_page","arguments":{"url":"https://example.com"}}' | jq . | head -20
-check_response "Tool invocation success" "$BASE_URL/mcp/invoke" "200"
+  -d '{"tool":"selenium_open_page","arguments":{"url":"https://example.com"}}')
+
+# Pretty-print the first part of the response
+cat response.json | jq . | head -20
 echo "$DIVIDER"
+
+# Evaluate HTTP status
+if [[ "$HTTP_STATUS" == "200" ]]; then
+  echo -e "${GREEN}✅ Tool invocation success ($BASE_URL/mcp/invoke) [HTTP $HTTP_STATUS]${RESET}"
+else
+  echo -e "${RED}❌ FAIL — Tool invocation ($BASE_URL/mcp/invoke) [HTTP $HTTP_STATUS]${RESET}"
+  FAIL=$((FAIL+1))
+fi
 
 # === Final Outcome ===
 if [[ $FAIL -eq 0 ]]; then
