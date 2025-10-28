@@ -1,27 +1,18 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ==========================================================
 # start.sh — Start Selenium MCP (local or Render)
 # ==========================================================
+set -e
 
 echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
-# Export line removed  — Python handles this internally
-echo "[INFO] MCP_VERSION auto-handled by server.py"
+echo "[INFO] MCP_VERSION auto-handled internally by server.py"
 
-if "MCP_VERSION" not in globals() or not globals().get("MCP_VERSION"):
-    MCP_VERSION = os.getenv(
-        "MCP_VERSION",
-        f"v{datetime.date.today().strftime('%Y%m%d')}a"
-    )
-
-python3 -m uvicorn server:app --host 0.0.0.0 --port 10000
-
-# === Setup environment
+# === Setup environment ===
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_DIR="logs/deploy_$TIMESTAMP"
 mkdir -p "$LOG_DIR"
-
 echo "[INFO] Logs rotated. Active folder: $LOG_DIR"
 
 # === Load .env safely ===
@@ -34,24 +25,28 @@ else
   echo "[WARN] No .env file found."
 fi
 
-# === Check ChromeDriver and Chrome binaries ===
+# === Verify ChromeDriver and Chrome binaries ===
 if [ ! -f ./chromedriver/chromedriver ]; then
   echo "[ERROR] Missing ChromeDriver at ./chromedriver/chromedriver"
   exit 1
 fi
 echo "[INFO] ✅ ChromeDriver binary present at ./chromedriver/chromedriver"
 
+if [ -z "$CHROME_BINARY" ]; then
+  echo "[WARN] CHROME_BINARY not set. Attempting to auto-detect..."
+  export CHROME_BINARY="$(which google-chrome || which chromium || true)"
+fi
+
 if [ ! -x "$CHROME_BINARY" ]; then
-  echo "[ERROR] CHROME_BINARY is not executable: $CHROME_BINARY"
+  echo "[ERROR] CHROME_BINARY is not executable or not found: $CHROME_BINARY"
   exit 1
 fi
 echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
 
-# === Start Uvicorn ===
+# === Launch MCP Server ===
 UVICORN_CMD="uvicorn server:app --host 0.0.0.0 --port 10000"
 echo "[INFO] Launching MCP Server via Uvicorn on port 10000..."
 
-# Detect Render environment via ENV variable or path
 if [[ "$RENDER" == "true" || "$PWD" == *"/opt/render"* ]]; then
   echo "[INFO] Detected Render environment. Starting in foreground..."
   $UVICORN_CMD
@@ -73,23 +68,23 @@ for i in {1..15}; do
 done
 
 # === Optional warmup ping to public endpoint ===
-# Sanitize RENDER_EXTERNAL_URL to avoid double https://
-SANITIZED_URL="${RENDER_EXTERNAL_URL#https://}"
-
-echo "=========================================================="
-echo "[WARMUP] Warming MCP endpoint: https://$SANITIZED_URL/mcp/schema"
-echo "=========================================================="
-for i in {1..10}; do
-  TIME=$(curl -s -o /dev/null -w "%{time_total}" "https://$SANITIZED_URL/mcp/schema")
-  STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SANITIZED_URL/mcp/schema")
-  if [[ "$STATUS" == "200" ]]; then
-    echo "[WARMUP ✅] Success at attempt $i → $TIME sec"
-    break
-  else
-    echo "❌ [WARMUP] Not ready (HTTP $STATUS). Retrying in 3s..."
-    sleep 3
-  fi
-done
+if [ -n "$RENDER_EXTERNAL_URL" ]; then
+  SANITIZED_URL="${RENDER_EXTERNAL_URL#https://}"
+  echo "=========================================================="
+  echo "[WARMUP] Warming MCP endpoint: https://$SANITIZED_URL/mcp/schema"
+  echo "=========================================================="
+  for i in {1..10}; do
+    TIME=$(curl -s -o /dev/null -w "%{time_total}" "https://$SANITIZED_URL/mcp/schema")
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$SANITIZED_URL/mcp/schema")
+    if [[ "$STATUS" == "200" ]]; then
+      echo "[WARMUP ✅] Success at attempt $i → $TIME sec"
+      break
+    else
+      echo "❌ [WARMUP] Not ready (HTTP $STATUS). Retrying in 3s..."
+      sleep 3
+    fi
+  done
+fi
 
 echo "----------------------------------------------------------"
 echo "[WARMUP] MCP warmup complete."
