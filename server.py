@@ -34,11 +34,19 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
 # ----------------------------------------------------------
-# ✅ Safe global getter for MCP version (ADD HERE)
+# Global version utility
 # ----------------------------------------------------------
 def get_mcp_version():
-    """Safe global getter for MCP version across endpoints."""
-    return globals().get("MCP_VERSION") or os.getenv("MCP_VERSION") or "v0.0.0-dev"
+    """Return MCP version from global or environment, with safe default."""
+    v = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION")
+    return str(v or f"v{datetime.date.today().strftime('%Y%m%d')}a")
+
+# ----------------------------------------------------------
+# 🚀 Render Rebuild Verification Banner
+# ----------------------------------------------------------
+import datetime, os
+MCP_VERSION = os.getenv("MCP_VERSION", "unknown")
+print(f"🚀 Render rebuild verified: {datetime.datetime.utcnow().isoformat()} | MCP_VERSION: {MCP_VERSION}")
 
 # ----------------------------------------------------------
 # Imports and FastAPI app setup
@@ -83,7 +91,7 @@ def root_manifest():
         "type": "manifest",
         "name": SERVER_NAME,
         "description": SERVER_DESC,
-        "version": MCP_VERSION
+        "version": get_mcp_version()
     }
 
 # ----------------------------------------------------------
@@ -268,7 +276,7 @@ def serve_adaptive_schema(request: Request):
     client_ua = request.headers.get("User-Agent", "unknown")
     print(f"[SCHEMA] Request from: {client_ua}")
     return {
-        "version": MCP_VERSION,
+        "version": get_mcp_version(),
         "tools": MCP_TOOLS_LIST
     }
 
@@ -340,7 +348,7 @@ def serve_static_manifest():
     Serve a stable manifest for external agents (Render-safe).
     Embeds tool definitions inline to avoid missing globals.
     """
-    print(f"[INFO] Served /static/manifest.json → mirrors /mcp/schema ({MCP_VERSION})")
+    print(f"[INFO] Served /static/manifest.json → mirrors /mcp/schema ({get_mcp_version()})")
 
     # Inline tool list to ensure no async import issues
     tools = [
@@ -384,12 +392,12 @@ def serve_static_manifest():
 
     schema = {
         "type": "mcp_server",
-        "version": MCP_VERSION,
+        "version": get_mcp_version(),
         "mcp_version": get_mcp_version(),
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
-            "version": MCP_VERSION,
+            "version": get_mcp_version(),
             "runtime": platform.python_version(),
         },
         "capabilities": {
@@ -420,7 +428,7 @@ def serve_mcp_manifest():
     Uses /mcp/manifest instead of /static/manifest.json
     to avoid FastAPI StaticFiles conflicts.
     """
-    print(f"[INFO] Served /mcp/manifest → stable schema export ({MCP_VERSION})")
+    print(f"[INFO] Served /mcp/manifest → stable schema export ({get_mcp_version()})")
 
     tools = [
         {
@@ -463,12 +471,12 @@ def serve_mcp_manifest():
 
     schema = {
         "type": "mcp_server",
-        "version": MCP_VERSION,
+        "version": get_mcp_version(),
         "mcp_version": get_mcp_version(),
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
-            "version": MCP_VERSION,
+            "version": get_mcp_version(),
             "runtime": platform.python_version(),
         },
         "capabilities": {
@@ -504,11 +512,11 @@ def root_manifest(request: Request):
     return {
         "type": "mcp_server",
         "mcp_version": get_mcp_version(),
-        "version": MCP_VERSION,
+        "version": get_mcp_version(),
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
-            "version": MCP_VERSION,
+            "version": get_mcp_version(),
         },
         "endpoints": {
             "schema": f"{request.base_url}mcp/schema",
@@ -525,11 +533,11 @@ def post_root_manifest(request: Request):
     return {
         "type": "mcp_server",
         "mcp_version": get_mcp_version(),
-        "version": MCP_VERSION,
+        "version": get_mcp_version(),
         "server_info": {
             "name": SERVER_NAME,
             "description": SERVER_DESC,
-            "version": MCP_VERSION,
+           "version": get_mcp_version(),
         },
         "endpoints": {
             "schema": f"{request.base_url}mcp/schema",
@@ -542,36 +550,23 @@ def post_root_manifest(request: Request):
 # ----------------------------------------------------------
 @app.api_route("/live", methods=["GET", "POST"])
 def live():
-    return {"status": "live", "version": MCP_VERSION}
+    return {"status": "live", "version": get_mcp_version()}
 
 
 # ----------------------------------------------------------
 # MCP Schema — Strictly Formatted Tool List for Agents
 # ----------------------------------------------------------
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
-async def serve_schema(request: Request):
-    user_agent = request.headers.get("User-Agent", "unknown")
-    print(f"[SCHEMA] Request from: {user_agent}")
-
-    return JSONResponse({
-        "version": MCP_VERSION,
-        "tools": MCP_TOOLS_LIST
-    })
-
-
-# ==========================================================
-# Canonical /mcp/schema → Primary Agent Builder manifest endpoint
-# ==========================================================
-@app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
     """Serve unified schema structure for OpenAI Agent Builder (literal-safe version)."""
-    import os, platform, json, logging, sys
+    import os, platform, json, logging, sys, datetime
     from copy import deepcopy
 
-    global MCP_VERSION
+    print(f"🧩 [CHECKPOINT] serve_schema() invoked fresh at {datetime.datetime.now().isoformat()}", flush=True)
+    sys.stdout.flush()
 
     # ----------------------------------------------------------
-    # 🚧 Defensive: Reset any global schema shadowing
+    # Defensive: Clear old schema shadow if any
     # ----------------------------------------------------------
     if "schema" in globals():
         try:
@@ -580,16 +575,12 @@ def serve_schema(request: Request):
             pass
 
     # ----------------------------------------------------------
-    # Resolve version deterministically
+    # Resolve version deterministically from canonical getter
     # ----------------------------------------------------------
-    resolved_version = str(
-        globals().get("MCP_VERSION")
-        or os.getenv("MCP_VERSION")
-        or "v0.0.0-dev"
-    )
+    resolved_version = str(get_mcp_version() or "v0.0.0-dev")
 
     # ----------------------------------------------------------
-    # Build canonical schema dict
+    # Build canonical schema dictionary
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
@@ -610,7 +601,7 @@ def serve_schema(request: Request):
     }
 
     # ----------------------------------------------------------
-    # 🔒 Enforce literal safety for all values
+    # 🔒 Literal safety enforcement
     # ----------------------------------------------------------
     def literalize(obj):
         if isinstance(obj, dict):
@@ -618,44 +609,87 @@ def serve_schema(request: Request):
         elif obj is None:
             return "v0.0.0-dev"
         return str(obj)
-    
+
     schema = literalize(schema)
 
     # ----------------------------------------------------------
-    # 🧱 Final literal enforcement before serialization
+    # 🩹 Post-literalization repair for null fields
     # ----------------------------------------------------------
-    schema["version"] = str(resolved_version)
-    schema["mcp_version"] = str(resolved_version)
-    if isinstance(schema.get("server_info"), dict):
-        schema["server_info"]["version"] = str(resolved_version)
+    resolved_version = get_mcp_version()
+    if not schema.get("mcp_version"):
+        schema["mcp_version"] = resolved_version
+    if "server_info" in schema:
+        if not schema["server_info"].get("version"):
+            schema["server_info"]["version"] = resolved_version
+
+    # Guaranteed visible checkpoint
+    print(f"🩺 [CHECKPOINT] Schema repaired → version={schema.get('version')} | mcp_version={schema.get('mcp_version')} | server_info.version={schema.get('server_info', {}).get('version')}", flush=True)
 
     # ----------------------------------------------------------
-    # 🔍 Diagnostic trace output (guaranteed visible in Render logs)
-    # ----------------------------------------------------------
-    logger = logging.getLogger("uvicorn.error")
-    trace_data = {
-        "version": schema.get("version"),
-        "mcp_version": schema.get("mcp_version"),
-        "server_info.version": schema.get("server_info", {}).get("version"),
-        "GLOBAL": globals().get("MCP_VERSION"),
-        "ENV": os.getenv("MCP_VERSION"),
-    }
-    logger.info(f"[TRACE-FINAL] {json.dumps(trace_data, indent=2)}")
-    sys.stdout.flush()
-
-    # ----------------------------------------------------------
-    # ✅ Safe serialization via deepcopy
+    # ✅ Safe serialization (deepcopy + JSON load)
     # ----------------------------------------------------------
     payload = deepcopy(schema)
-    payload["version"] = resolved_version
-    payload["mcp_version"] = resolved_version
-    if "server_info" in payload and isinstance(payload["server_info"], dict):
-        payload["server_info"]["version"] = resolved_version
-
     safe_json = json.loads(json.dumps(payload, default=str))
 
-    return JSONResponse(
-        content=safe_json,
+    # 🩹 Final pre-return repair (after deepcopy & serialization)
+    resolved_version = get_mcp_version()
+    for key in ("version", "mcp_version"):
+        safe_json[key] = resolved_version
+    if isinstance(safe_json.get("server_info"), dict):
+        safe_json["server_info"]["version"] = resolved_version
+
+    # ----------------------------------------------------------
+    # 🚀 Guaranteed visible checkpoint
+    # ----------------------------------------------------------
+    print(
+        "🚀 [CHECKPOINT] serve_schema() finalized successfully!\n"
+        f"Resolved version: {resolved_version}\n"
+        f"Schema summary:\n{json.dumps({k: safe_json.get(k) for k in ['version', 'mcp_version', 'server_info']}, indent=2)}",
+        flush=True
+    )
+
+    # ----------------------------------------------------------
+    # 🧩 Force literal-safe JSON encoding to preserve all values
+    # ----------------------------------------------------------
+    final_json_str = json.dumps(safe_json, ensure_ascii=False, indent=2)
+    final_payload = json.loads(final_json_str)
+
+    print(
+        "✅ [FINAL-PASS] Returning fully literalized schema →",
+        json.dumps(
+            {
+                "version": final_payload.get("version"),
+                "mcp_version": final_payload.get("mcp_version"),
+                "server_info.version": final_payload.get("server_info", {}).get("version"),
+            },
+            indent=2,
+        ),
+        flush=True,
+    )
+
+    # ----------------------------------------------------------
+    # ✅ Final literal lock: bypass FastAPI encoder
+    # ----------------------------------------------------------
+    import json
+    final_json_str = json.dumps(
+        safe_json,
+        ensure_ascii=False,
+        indent=2,
+        default=str,
+    )
+
+    # 🚀 Visible checkpoint (always prints in Render logs)
+    print(
+        f"🚀 [FINAL-RETURN] MCP schema literalized:\n"
+        f"version={resolved_version}\n"
+        f"{final_json_str[:600]}...\n",  # truncates long output for readability
+        flush=True
+    )
+
+    from fastapi.responses import Response
+    return Response(
+        content=final_json_str,
+        media_type="application/json; charset=utf-8",
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate",
             "Pragma": "no-cache",
@@ -699,7 +733,7 @@ def openapi_spec():
         "openapi": "3.0.0",
         "info": {
             "title": "Selenium MCP API",
-            "version": MCP_VERSION,
+            "version": get_mcp_version(),
             "description": "OpenAPI spec for Selenium MCP tools"
         },
         "paths": { ... }  # define your 4 tools here
@@ -769,5 +803,5 @@ async def handle_open_page(args: dict):
 # ----------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    print(f"[INFO] Launching MCP Server on port 10000 (version={MCP_VERSION})")
+    print(f"[INFO] Launching MCP Server on port 10000 (version={resolved_version})")
     uvicorn.run(app, host="0.0.0.0", port=10000)
