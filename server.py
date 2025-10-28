@@ -39,22 +39,69 @@ from selenium_tools import (
     selenium_screenshot,
 )
 
-# ----------------------------------------------------------
-# Global version utility
-# ----------------------------------------------------------
-def get_mcp_version():
-    return globals().get("MCP_VERSION", "v0.0.0-unknown")
 
-# ==========================================================
-# MCP Version Initialization (Safe Fallback)
-# ==========================================================
-import os, datetime
+# ----------------------------------------------------------
+# 🌐 Global MCP Version Utility with Auto-Increment + Logging
+# ----------------------------------------------------------
+import os
+import datetime
+import string
 
-MCP_VERSION = os.getenv("MCP_VERSION", f"v{datetime.date.today().strftime('%Y%m%d')}a")
+def _generate_mcp_version() -> str:
+    """Generate an MCP version string like v20251028a, v20251028b, etc."""
+    base_date = datetime.date.today().strftime('%Y%m%d')
+    env_version = os.getenv("MCP_VERSION")  # explicit override
+    env_suffix = os.getenv("MCP_SUFFIX")    # manual suffix (e.g., b, c, d)
+    version_file = "mcp_version.txt"
+    base_prefix = f"v{base_date}"
+
+    # Priority 1: explicit environment variable
+    if env_version:
+        print(f"[INFO] MCP version explicitly set via environment → {env_version}")
+        return env_version
+
+    # Determine next suffix
+    if os.path.exists(version_file):
+        with open(version_file, "r") as f:
+            last_version = f.read().strip()
+        if last_version.startswith(base_prefix):
+            last_suffix = last_version[-1]
+            if last_suffix in string.ascii_lowercase:
+                next_suffix = string.ascii_lowercase[
+                    (string.ascii_lowercase.index(last_suffix) + 1) % len(string.ascii_lowercase)
+                ]
+            else:
+                next_suffix = "a"
+            new_version = f"{base_prefix}{next_suffix}"
+        else:
+            new_version = f"{base_prefix}a"
+    else:
+        new_version = f"{base_prefix}a"
+
+    # Manual override via MCP_SUFFIX (e.g., MCP_SUFFIX=c)
+    if env_suffix:
+        new_version = f"{base_prefix}{env_suffix}"
+        print(f"[INFO] MCP_SUFFIX override detected → {env_suffix}")
+
+    # Save to file for next deploy
+    with open(version_file, "w") as f:
+        f.write(new_version)
+
+    # Log in Render output for visibility
+    print(f"[INFO] MCP version updated to {new_version}")
+
+    return new_version
+
+
+# Initialize MCP version globally
+MCP_VERSION = _generate_mcp_version()
 
 def get_mcp_version() -> str:
     """Return the canonical MCP version string (never None)."""
     return MCP_VERSION or "v0.0.0-unknown"
+
+print(f"[BOOT] MCP_VERSION initialized → {MCP_VERSION}")
+
 
 # ==========================================================
 # === Banner ===
@@ -70,6 +117,15 @@ startup_debug_banner()
 # ----------------------------------------------------------
 from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
+
+# 🌐 CORS Middleware Configuration ...
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Serve static assets (like logo.png)
 app.mount("/static", StaticFiles(directory="static"), name="static")
