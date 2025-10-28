@@ -713,6 +713,19 @@ def serve_schema(request: Request):
         },
     )
 
+# ----------------------------------------------------------
+# MCP Status — Lightweight Health & Compliance Check
+# ----------------------------------------------------------
+@app.get("/mcp/status")
+def mcp_status():
+    """Return simple MCP readiness & compliance status for remote checks."""
+    from fastapi.responses import JSONResponse
+    return JSONResponse({
+        "status": "ok",
+        "message": "Selenium MCP server is live and compliant.",
+        "mcp_version": get_mcp_version(),
+        "tools_registered": len(MCP_TOOLS_LIST),
+    })
 
 # ----------------------------------------------------------
 # Internal Debug Route — Reveals active MCP schema & tools

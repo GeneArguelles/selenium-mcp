@@ -6,9 +6,14 @@
 echo "=========================================================="
 echo "[INFO] Starting Selenium MCP startup sequence..."
 echo "=========================================================="
+# Export line removed  — Python handles this internally
+echo "[INFO] MCP_VERSION auto-handled by server.py"
 
-export MCP_VERSION="v$(date +%Y%m%d)a"
-echo "[INFO] MCP_VERSION set to $MCP_VERSION"
+if "MCP_VERSION" not in globals() or not globals().get("MCP_VERSION"):
+    MCP_VERSION = os.getenv(
+        "MCP_VERSION",
+        f"v{datetime.date.today().strftime('%Y%m%d')}a"
+    )
 
 python3 -m uvicorn server:app --host 0.0.0.0 --port 10000
 
