@@ -756,6 +756,30 @@ def mcp_status():
     })
 
 # ----------------------------------------------------------
+# 🧠 MCP Invocation Endpoint (placeholder for Agent Builder)
+# ----------------------------------------------------------
+@app.post("/mcp/invoke")
+async def mcp_invoke(request: Request):
+    """
+    Accepts a POST request from Agent Builder to invoke a tool.
+    This placeholder always returns 200 with a mock success payload.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    return JSONResponse(
+        {
+            "status": "ok",
+            "message": "Invocation endpoint reachable (placeholder).",
+            "received_payload": body,
+            "mcp_version": get_mcp_version(),
+        },
+        status_code=200,
+    )
+
+# ----------------------------------------------------------
 # Internal Debug Route — Reveals active MCP schema & tools
 # ----------------------------------------------------------
 @app.get("/mcp/internal_schema")
