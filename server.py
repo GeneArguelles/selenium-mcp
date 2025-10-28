@@ -756,30 +756,6 @@ def mcp_status():
     })
 
 # ----------------------------------------------------------
-# 🧠 MCP Invocation Endpoint (placeholder for Agent Builder)
-# ----------------------------------------------------------
-@app.post("/mcp/invoke")
-async def mcp_invoke(request: Request):
-    """
-    Accepts a POST request from Agent Builder to invoke a tool.
-    This placeholder always returns 200 with a mock success payload.
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-
-    return JSONResponse(
-        {
-            "status": "ok",
-            "message": "Invocation endpoint reachable (placeholder).",
-            "received_payload": body,
-            "mcp_version": get_mcp_version(),
-        },
-        status_code=200,
-    )
-
-# ----------------------------------------------------------
 # Internal Debug Route — Reveals active MCP schema & tools
 # ----------------------------------------------------------
 @app.get("/mcp/internal_schema")
@@ -834,28 +810,64 @@ def post_schema():
     return get_schema()
 
 # ----------------------------------------------------------
-# MCP Invocation Endpoint
+# 🧠 MCP Invocation Endpoint — active dispatcher
 # ----------------------------------------------------------
 @app.post("/mcp/invoke")
-async def invoke_tool(req: InvokeRequest):
-    tool = req.tool
-    args = req.arguments or {}
-
-    print(f"[INFO] Tool requested: {tool}")
-    handler_name = TOOL_EXECUTION_MAP.get(tool)
-
-    if not handler_name:
-        raise HTTPException(status_code=404, detail=f"Unknown tool: {tool}")
-
-    handler_func = globals().get(handler_name)
-    if not callable(handler_func):
-        raise HTTPException(status_code=500, detail="Handler not callable.")
-
+async def mcp_invoke(request: Request):
+    """
+    Handles invocation requests from Agent Builder and executes Selenium tools.
+    """
     try:
-        result = await handler_func(args)
-        return {"tool": tool, "result": result}
+        data = await request.json()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            {"error": f"Invalid JSON payload: {str(e)}"}, status_code=400
+        )
+
+    tool = data.get("tool")
+    args = data.get("args") or data.get("params") or {}
+
+    print(f"[INFO] /mcp/invoke called with tool={tool}, args={args}")
+
+    if not tool:
+        return JSONResponse({"error": "Missing 'tool' argument."}, status_code=400)
+
+    # --- Tool dispatching logic ---
+    try:
+        if tool == "selenium_open_page":
+            url = args.get("url")
+            if not url:
+                return JSONResponse({"error": "Missing 'url' argument."}, status_code=400)
+            result = selenium_open_page(url)
+            return JSONResponse({"status": "success", "tool": tool, "result": result})
+
+        elif tool == "selenium_click":
+            selector = args.get("selector")
+            if not selector:
+                return JSONResponse({"error": "Missing 'selector' argument."}, status_code=400)
+            result = selenium_click(selector)
+            return JSONResponse({"status": "success", "tool": tool, "result": result})
+
+        elif tool == "selenium_get_text":
+            selector = args.get("selector")
+            if not selector:
+                return JSONResponse({"error": "Missing 'selector' argument."}, status_code=400)
+            result = selenium_get_text(selector)
+            return JSONResponse({"status": "success", "tool": tool, "result": result})
+
+        elif tool == "selenium_screenshot":
+            filename = args.get("filename", "screenshot.png")
+            result = selenium_screenshot(filename)
+            return JSONResponse({"status": "success", "tool": tool, "result": result})
+
+        else:
+            return JSONResponse(
+                {"error": f"Unknown tool '{tool}'."}, status_code=404
+            )
+
+    except Exception as e:
+        print(f"[ERROR] Tool execution failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 # ----------------------------------------------------------
 # Tool Handler: selenium_open_page
