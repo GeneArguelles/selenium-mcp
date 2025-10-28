@@ -623,6 +623,15 @@ def serve_schema(request: Request):
 
     schema = literalize(schema)
 
+    # 🩹 Ensure 'tools' is a proper JSON array (not stringified)
+    import ast
+    if isinstance(schema.get("tools"), str):
+        try:
+            schema["tools"] = ast.literal_eval(schema["tools"])
+            print(f"🧠 [CHECKPOINT] Tools re-parsed into JSON array ({len(schema['tools'])} items)", flush=True)
+        except Exception as e:
+            print(f"⚠️ [WARN] Tools list could not be parsed: {e}", flush=True)
+
     # ----------------------------------------------------------
     # 🩹 Post-literalization repair for tool list
     # ----------------------------------------------------------
