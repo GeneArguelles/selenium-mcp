@@ -679,6 +679,14 @@ def serve_schema(request: Request):
     # ----------------------------------------------------------
     # 🧩 Force literal-safe JSON encoding to preserve all values
     # ----------------------------------------------------------
+    # 🩹 Ensure tools remain as real JSON arrays (not stringified)
+    if isinstance(schema.get("tools"), str):
+        try:
+            import ast
+            schema["tools"] = ast.literal_eval(schema["tools"])
+        except Exception as e:
+            print(f"[WARN] Could not re-parse tools list: {e}", flush=True) 
+ 
     final_json_str = json.dumps(safe_json, ensure_ascii=False, indent=2)
     final_payload = json.loads(final_json_str)
 
