@@ -613,6 +613,23 @@ def serve_schema(request: Request):
     schema = literalize(schema)
 
     # ----------------------------------------------------------
+    # 🩹 Post-literalization repair for tool list
+    # ----------------------------------------------------------
+    if isinstance(schema.get("tools"), str):
+        import ast
+        try:
+            parsed_tools = ast.literal_eval(schema["tools"])
+            if isinstance(parsed_tools, list):
+                schema["tools"] = parsed_tools
+                print(f"🧠 [CHECKPOINT] Tools list successfully re-parsed: {len(parsed_tools)} tools", flush=True)
+            else:
+                print("⚠️ [WARN] Tools re-parsed but not list type — replaced with []", flush=True)
+                schema["tools"] = []
+        except Exception as e:
+            print(f"❌ [ERROR] Failed to re-parse tools list: {e}", flush=True)
+            schema["tools"] = []    
+
+    # ----------------------------------------------------------
     # 🩹 Post-literalization repair for null fields
     # ----------------------------------------------------------
     resolved_version = get_mcp_version()
