@@ -37,16 +37,27 @@ from selenium.webdriver.chrome.options import Options
 # Global version utility
 # ----------------------------------------------------------
 def get_mcp_version():
-    """Return MCP version from global or environment, with safe default."""
-    v = globals().get("MCP_VERSION") or os.getenv("MCP_VERSION")
-    return str(v or f"v{datetime.date.today().strftime('%Y%m%d')}a")
+    return globals().get("MCP_VERSION", "v0.0.0-unknown")
 
-# ----------------------------------------------------------
-# 🚀 Render Rebuild Verification Banner
-# ----------------------------------------------------------
-import datetime, os
-MCP_VERSION = os.getenv("MCP_VERSION", "unknown")
-print(f"🚀 Render rebuild verified: {datetime.datetime.utcnow().isoformat()} | MCP_VERSION: {MCP_VERSION}")
+# ==========================================================
+# MCP Version Initialization (Safe Fallback)
+# ==========================================================
+import os, datetime
+
+MCP_VERSION = os.getenv("MCP_VERSION", f"v{datetime.date.today().strftime('%Y%m%d')}a")
+
+def get_mcp_version() -> str:
+    """Return the canonical MCP version string (never None)."""
+    return MCP_VERSION or "v0.0.0-unknown"
+
+# ==========================================================
+# === Banner ===
+# ==========================================================
+def startup_debug_banner():
+    import datetime
+    print(f"🚀 Render rebuild verified: {datetime.datetime.now().isoformat()} | MCP_VERSION: {get_mcp_version()}", flush=True)
+
+startup_debug_banner()
 
 # ----------------------------------------------------------
 # Imports and FastAPI app setup
