@@ -32,6 +32,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium_tools import (
+    selenium_open_page,
+    selenium_click,
+    selenium_get_text,
+    selenium_screenshot,
+)
 
 # ----------------------------------------------------------
 # Global version utility
