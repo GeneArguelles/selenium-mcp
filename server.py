@@ -631,9 +631,10 @@ def live():
 # ----------------------------------------------------------
 @app.api_route("/mcp/schema", methods=["GET", "POST", "HEAD", "OPTIONS"])
 def serve_schema(request: Request):
-    """Serve unified schema structure for OpenAI Agent Builder (literal-safe version)."""
+    """Serve unified schema structure for OpenAI Agent Builder (dual-mode: full MCP or flattened AB schema)."""
     import os, platform, json, logging, sys, datetime
     from copy import deepcopy
+    from fastapi.responses import Response
 
     print(f"🧩 [CHECKPOINT] serve_schema() invoked fresh at {datetime.datetime.now().isoformat()}", flush=True)
     sys.stdout.flush()
@@ -648,12 +649,12 @@ def serve_schema(request: Request):
             pass
 
     # ----------------------------------------------------------
-    # Resolve version deterministically from canonical getter
+    # Resolve version deterministically
     # ----------------------------------------------------------
     resolved_version = str(get_mcp_version() or "v0.0.0-dev")
 
     # ----------------------------------------------------------
-    # Build canonical schema dictionary
+    # Canonical MCP schema (full structure)
     # ----------------------------------------------------------
     schema = {
         "type": "mcp_server",
@@ -674,7 +675,7 @@ def serve_schema(request: Request):
     }
 
     # ----------------------------------------------------------
-    # 🔒 Literal safety enforcement
+    # Literal safety enforcement
     # ----------------------------------------------------------
     def literalize(obj):
         if isinstance(obj, dict):
@@ -685,7 +686,7 @@ def serve_schema(request: Request):
 
     schema = literalize(schema)
 
-    # 🧠 Ensure 'tools' is a proper JSON array
+    # 🧠 Ensure 'tools' array is valid JSON
     import ast
     if isinstance(schema.get("tools"), str):
         try:
@@ -693,96 +694,101 @@ def serve_schema(request: Request):
             print(f"🧠 [CHECKPOINT] Tools re-parsed into JSON array ({len(schema['tools'])} items)", flush=True)
         except Exception as e:
             print(f"⚠️ [WARN] Tools list could not be parsed: {e}", flush=True)
-
-    # 🩹 Post-literalization repair for tool list
-    if isinstance(schema.get("tools"), str):
-        try:
-            parsed_tools = ast.literal_eval(schema["tools"])
-            if isinstance(parsed_tools, list):
-                schema["tools"] = parsed_tools
-                print(f"🧠 [CHECKPOINT] Tools list successfully re-parsed: {len(parsed_tools)} tools", flush=True)
-            else:
-                print("⚠️ [WARN] Tools re-parsed but not list type — replaced with []", flush=True)
-                schema["tools"] = []
-        except Exception as e:
-            print(f"❌ [ERROR] Failed to re-parse tools list: {e}", flush=True)
             schema["tools"] = []
 
-    # 🩹 Repair for null version fields
+    # 🩹 Version repairs
     resolved_version = get_mcp_version()
-    if not schema.get("mcp_version"):
-        schema["mcp_version"] = resolved_version
+    schema["mcp_version"] = schema.get("mcp_version") or resolved_version
     if "server_info" in schema:
-        if not schema["server_info"].get("version"):
-            schema["server_info"]["version"] = resolved_version
-
-    print(f"🩺 [CHECKPOINT] Schema repaired → version={schema.get('version')} | mcp_version={schema.get('mcp_version')} | server_info.version={schema.get('server_info', {}).get('version')}", flush=True)
+        schema["server_info"]["version"] = schema["server_info"].get("version") or resolved_version
 
     # ----------------------------------------------------------
-    # ✅ Safe serialization (deepcopy + JSON load)
+    # 🧠 AUTO-DETECT CLIENT TYPE
     # ----------------------------------------------------------
-    payload = deepcopy(schema)
+    accept = request.headers.get("accept", "").lower()
+    user_agent = request.headers.get("user-agent", "").lower()
+    is_agentbuilder = "agentbuilder" in accept or "agentbuilder" in user_agent
 
-    # === 🔧 INSERTION: Full schema materialization and flush ===
-    try:
-        # Serialize then reload to ensure complete JSON
-        full_json = json.dumps(payload, indent=2, ensure_ascii=False)
-        parsed_json = json.loads(full_json)
-        print(f"✅ [FINAL-PASS] Schema generated ({len(parsed_json.get('tools', []))} tools)", flush=True)
-    except Exception as e:
-        print(f"❌ [ERROR] Failed to fully materialize schema: {e}", flush=True)
-        parsed_json = payload
-    # ==========================================================
+    print(f"🧠 [CHECKPOINT] Detected client → AgentBuilder={is_agentbuilder}", flush=True)
 
+    # ----------------------------------------------------------
+    # Alternate flattened schema (for OpenAI Agent Builder)
+    # ----------------------------------------------------------
+    flattened_schema = {
+        "mcp_version": "1.0",
+        "name": "selenium_mcp",
+        "description": "Headless browser automation tools for OpenAI Agent Builder.",
+        "tools": [
+            {
+                "name": "selenium_open_page",
+                "description": "Open a URL in a headless Chrome browser and return the page title.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "Full URL including https://"}
+                    },
+                    "required": ["url"],
+                },
+            },
+            {
+                "name": "selenium_click",
+                "description": "Click an element using a CSS selector.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {"type": "string", "description": "CSS selector for the element to click."}
+                    },
+                    "required": ["selector"],
+                },
+            },
+            {
+                "name": "selenium_screenshot",
+                "description": "Take a screenshot and return the saved file path.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "filename": {"type": "string", "description": "Filename (with .png extension)."}
+                    },
+                    "required": ["filename"],
+                },
+            },
+            {
+                "name": "selenium_get_text",
+                "description": "Retrieve visible text from an element.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "selector": {"type": "string", "description": "CSS selector for the element."}
+                    },
+                    "required": ["selector"],
+                },
+            },
+        ],
+    }
+
+    # ----------------------------------------------------------
+    # Choose which schema to return
+    # ----------------------------------------------------------
+    selected_schema = flattened_schema if is_agentbuilder else schema
+
+    payload = deepcopy(selected_schema)
+    full_json = json.dumps(payload, indent=2, ensure_ascii=False)
+    parsed_json = json.loads(full_json)
     safe_json = json.loads(json.dumps(parsed_json, default=str))
 
-    # 🩹 Final pre-return repair (after deepcopy & serialization)
-    resolved_version = get_mcp_version()
-    for key in ("version", "mcp_version"):
-        safe_json[key] = resolved_version
-    if isinstance(safe_json.get("server_info"), dict):
-        safe_json["server_info"]["version"] = resolved_version
-
+    # ----------------------------------------------------------
+    # Final reporting
+    # ----------------------------------------------------------
     print(
-        "🚀 [CHECKPOINT] serve_schema() finalized successfully!\n"
-        f"Resolved version: {resolved_version}\n"
-        f"Schema summary:\n{json.dumps({k: safe_json.get(k) for k in ['version', 'mcp_version', 'server_info']}, indent=2)}",
-        flush=True
-    )
-
-    # 🧩 Force literal-safe JSON encoding
-    final_json_str = json.dumps(safe_json, ensure_ascii=False, indent=2)
-    final_payload = json.loads(final_json_str)
-
-    print(
-        "✅ [FINAL-PASS] Returning fully literalized schema →",
-        json.dumps(
-            {
-                "version": final_payload.get("version"),
-                "mcp_version": final_payload.get("mcp_version"),
-                "server_info.version": final_payload.get("server_info", {}).get("version"),
-            },
-            indent=2,
-        ),
+        f"🚀 [FINAL-RETURN] Returning {'AgentBuilder' if is_agentbuilder else 'Full MCP'} schema | "
+        f"Version={resolved_version} | Tools={len(safe_json.get('tools', []))}",
         flush=True,
     )
 
-    # ✅ Final literal lock: bypass FastAPI encoder
-    final_json_str = json.dumps(
-        safe_json,
-        ensure_ascii=False,
-        indent=2,
-        default=str,
-    )
-
-    print(
-        f"🚀 [FINAL-RETURN] MCP schema literalized:\n"
-        f"version={resolved_version}\n"
-        f"{final_json_str[:600]}...\n",  # truncate long output
-        flush=True
-    )
-
-    from fastapi.responses import Response
+    # ----------------------------------------------------------
+    # Return unified JSON response
+    # ----------------------------------------------------------
+    final_json_str = json.dumps(safe_json, ensure_ascii=False, indent=2)
     return Response(
         content=final_json_str,
         media_type="application/json; charset=utf-8",
