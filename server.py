@@ -685,7 +685,7 @@ def serve_schema(request: Request):
 
     schema = literalize(schema)
 
-    # 🩹 Ensure 'tools' is a proper JSON array (not stringified)
+    # 🧠 Ensure 'tools' is a proper JSON array
     import ast
     if isinstance(schema.get("tools"), str):
         try:
@@ -694,11 +694,8 @@ def serve_schema(request: Request):
         except Exception as e:
             print(f"⚠️ [WARN] Tools list could not be parsed: {e}", flush=True)
 
-    # ----------------------------------------------------------
     # 🩹 Post-literalization repair for tool list
-    # ----------------------------------------------------------
     if isinstance(schema.get("tools"), str):
-        import ast
         try:
             parsed_tools = ast.literal_eval(schema["tools"])
             if isinstance(parsed_tools, list):
@@ -709,11 +706,9 @@ def serve_schema(request: Request):
                 schema["tools"] = []
         except Exception as e:
             print(f"❌ [ERROR] Failed to re-parse tools list: {e}", flush=True)
-            schema["tools"] = []    
+            schema["tools"] = []
 
-    # ----------------------------------------------------------
-    # 🩹 Post-literalization repair for null fields
-    # ----------------------------------------------------------
+    # 🩹 Repair for null version fields
     resolved_version = get_mcp_version()
     if not schema.get("mcp_version"):
         schema["mcp_version"] = resolved_version
@@ -721,14 +716,25 @@ def serve_schema(request: Request):
         if not schema["server_info"].get("version"):
             schema["server_info"]["version"] = resolved_version
 
-    # Guaranteed visible checkpoint
     print(f"🩺 [CHECKPOINT] Schema repaired → version={schema.get('version')} | mcp_version={schema.get('mcp_version')} | server_info.version={schema.get('server_info', {}).get('version')}", flush=True)
 
     # ----------------------------------------------------------
     # ✅ Safe serialization (deepcopy + JSON load)
     # ----------------------------------------------------------
     payload = deepcopy(schema)
-    safe_json = json.loads(json.dumps(payload, default=str))
+
+    # === 🔧 INSERTION: Full schema materialization and flush ===
+    try:
+        # Serialize then reload to ensure complete JSON
+        full_json = json.dumps(payload, indent=2, ensure_ascii=False)
+        parsed_json = json.loads(full_json)
+        print(f"✅ [FINAL-PASS] Schema generated ({len(parsed_json.get('tools', []))} tools)", flush=True)
+    except Exception as e:
+        print(f"❌ [ERROR] Failed to fully materialize schema: {e}", flush=True)
+        parsed_json = payload
+    # ==========================================================
+
+    safe_json = json.loads(json.dumps(parsed_json, default=str))
 
     # 🩹 Final pre-return repair (after deepcopy & serialization)
     resolved_version = get_mcp_version()
@@ -737,9 +743,6 @@ def serve_schema(request: Request):
     if isinstance(safe_json.get("server_info"), dict):
         safe_json["server_info"]["version"] = resolved_version
 
-    # ----------------------------------------------------------
-    # 🚀 Guaranteed visible checkpoint
-    # ----------------------------------------------------------
     print(
         "🚀 [CHECKPOINT] serve_schema() finalized successfully!\n"
         f"Resolved version: {resolved_version}\n"
@@ -747,17 +750,7 @@ def serve_schema(request: Request):
         flush=True
     )
 
-    # ----------------------------------------------------------
-    # 🧩 Force literal-safe JSON encoding to preserve all values
-    # ----------------------------------------------------------
-    # 🩹 Ensure tools remain as real JSON arrays (not stringified)
-    if isinstance(schema.get("tools"), str):
-        try:
-            import ast
-            schema["tools"] = ast.literal_eval(schema["tools"])
-        except Exception as e:
-            print(f"[WARN] Could not re-parse tools list: {e}", flush=True) 
- 
+    # 🧩 Force literal-safe JSON encoding
     final_json_str = json.dumps(safe_json, ensure_ascii=False, indent=2)
     final_payload = json.loads(final_json_str)
 
@@ -774,10 +767,7 @@ def serve_schema(request: Request):
         flush=True,
     )
 
-    # ----------------------------------------------------------
     # ✅ Final literal lock: bypass FastAPI encoder
-    # ----------------------------------------------------------
-    import json
     final_json_str = json.dumps(
         safe_json,
         ensure_ascii=False,
@@ -785,11 +775,10 @@ def serve_schema(request: Request):
         default=str,
     )
 
-    # 🚀 Visible checkpoint (always prints in Render logs)
     print(
         f"🚀 [FINAL-RETURN] MCP schema literalized:\n"
         f"version={resolved_version}\n"
-        f"{final_json_str[:600]}...\n",  # truncates long output for readability
+        f"{final_json_str[:600]}...\n",  # truncate long output
         flush=True
     )
 
@@ -802,6 +791,7 @@ def serve_schema(request: Request):
             "Pragma": "no-cache",
         },
     )
+
 
 # ----------------------------------------------------------
 # MCP Status — Lightweight Health & Compliance Check
