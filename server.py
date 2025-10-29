@@ -712,7 +712,7 @@ def serve_schema(request: Request):
         for token in ["agentbuilder", "openaiagentbuilder", "vndagentbuilderjson"]
     )
 
-print(f"🧩 [CHECKPOINT] Agent Builder detection → accept='{accept}' | user_agent='{user_agent}' | result={is_agentbuilder}", flush=True)
+    print(f"🧩 [CHECKPOINT] Agent Builder detection → accept='{accept}' | user_agent='{user_agent}' | result={is_agentbuilder}", flush=True)
 
     # ----------------------------------------------------------
     # Alternate flattened schema (for OpenAI Agent Builder)
