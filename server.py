@@ -780,6 +780,17 @@ def serve_schema(request: Request):
     safe_json = json.loads(json.dumps(parsed_json, default=str))
 
     # ----------------------------------------------------------
+    # ✅ MCP Schema Hardening (ensures literal arrays and proper headers)
+    # ----------------------------------------------------------
+    if isinstance(safe_json.get("tools"), str):
+        import ast
+        try:
+            safe_json["tools"] = ast.literal_eval(safe_json["tools"])
+        except Exception:
+            safe_json["tools"] = []
+    safe_json["type"] = "mcp_server"
+
+    # ----------------------------------------------------------
     # Final reporting
     # ----------------------------------------------------------
     print(
@@ -789,15 +800,19 @@ def serve_schema(request: Request):
     )
 
     # ----------------------------------------------------------
-    # Return unified JSON response
+    # ✅ Response Hardening (adds proper MIME + CORS + Content-Length)
     # ----------------------------------------------------------
     final_json_str = json.dumps(safe_json, ensure_ascii=False, indent=2)
     return Response(
         content=final_json_str,
-        media_type="application/json; charset=utf-8",
+        media_type="application/json",
         headers={
+            "Content-Length": str(len(final_json_str.encode("utf-8"))),
             "Cache-Control": "no-store, no-cache, must-revalidate",
             "Pragma": "no-cache",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
         },
     )
 
