@@ -705,11 +705,14 @@ def serve_schema(request: Request):
     # ----------------------------------------------------------
     # 🧠 AUTO-DETECT CLIENT TYPE
     # ----------------------------------------------------------
-    accept = request.headers.get("accept", "").lower()
-    user_agent = request.headers.get("user-agent", "").lower()
-    is_agentbuilder = "agentbuilder" in accept or "agentbuilder" in user_agent
+    accept = (request.headers.get("accept", "") or "").lower().replace("+", "").replace("/", "")
+    user_agent = (request.headers.get("user-agent", "") or "").lower().replace("+", "").replace("/", "")
+    is_agentbuilder = any(
+        token in accept or token in user_agent
+        for token in ["agentbuilder", "openaiagentbuilder", "vndagentbuilderjson"]
+    )
 
-    print(f"🧠 [CHECKPOINT] Detected client → AgentBuilder={is_agentbuilder}", flush=True)
+print(f"🧩 [CHECKPOINT] Agent Builder detection → accept='{accept}' | user_agent='{user_agent}' | result={is_agentbuilder}", flush=True)
 
     # ----------------------------------------------------------
     # Alternate flattened schema (for OpenAI Agent Builder)
