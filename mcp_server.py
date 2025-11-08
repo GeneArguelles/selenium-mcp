@@ -885,6 +885,7 @@ def post_schema():
     """
     return get_schema()
 
+
 # ----------------------------------------------------------
 # 🧠 MCP Invocation Endpoint — active dispatcher (MCP-compliant)
 # ----------------------------------------------------------
@@ -894,43 +895,88 @@ async def mcp_invoke(request: Request):
     Handles invocation requests from Agent Builder and executes Selenium tools.
     Compatible with both OpenAI Agent Builder and MCP validation.
     """
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception as e:
+        return JSONResponse({"error": f"Invalid JSON: {str(e)}"}, status_code=400)
+
     tool = data.get("tool")
-    args = data.get("arguments") or data.get("args") or data.get("params") or {}
+    args = (
+        data.get("arguments")
+        or data.get("args")
+        or data.get("params")
+        or {}
+    )
 
     if not tool:
         return JSONResponse({"error": "Missing 'tool' argument."}, status_code=400)
 
-    if tool == "selenium_open_page":
-        url = args.get("url")
-        if not url:
-            return JSONResponse({"error": "Missing 'url' argument."}, status_code=400)
-        result = selenium_open_page(url)
-        return JSONResponse({"status": "success", "tool": tool, "result": result})
+    try:
+        if tool == "selenium_open_page":
+            url = args.get("url")
+            if not url:
+                return JSONResponse({"error": "Missing 'url' argument."}, status_code=400)
+            result = selenium_open_page(url)
+            return JSONResponse({"status": "success", "tool": tool, "result": result})
 
-    elif tool == "selenium_click":
-        selector = args.get("selector")
-        if not selector:
-            return JSONResponse({"error": "Missing 'selector' argument."}, status_code=400)
-        result = selenium_click(selector)
-        return JSONResponse({"status": "success", "tool": tool, "result": result})
+        elif tool == "selenium_click":
+            selector = args.get("selector")
+            if not selector:
+                return JSONResponse({"error": "Missing 'selector' argument."}, status_code=400)
+            try:
+                result = selenium_click(selector)
+                return JSONResponse({"status": "success", "tool": tool, "result": result})
+            except Exception as e:
+                return JSONResponse(
+                    {"status": "error", "tool": tool, "error": f"Click failed: {str(e)}"},
+                    status_code=200,
+                )
 
-    elif tool == "selenium_get_text":
-        selector = args.get("selector")
-        if not selector:
-            return JSONResponse({"error": "Missing 'selector' argument."}, status_code=400)
-        result = selenium_get_text(selector)
-        return JSONResponse({"status": "success", "tool": tool, "result": result})
+        elif tool == "selenium_get_text":
+            selector = args.get("selector")
+            if not selector:
+                return JSONResponse({"error": "Missing 'selector' argument."}, status_code=400)
+            try:
+                result = selenium_get_text(selector)
+                return JSONResponse({"status": "success", "tool": tool, "result": result})
+            except Exception as e:
+                return JSONResponse(
+                    {
+                        "status": "error",
+                        "tool": tool,
+                        "error": f"Selector '{selector}' not found: {str(e)}",
+                    },
+                    status_code=200,
+                )
 
-    elif tool == "selenium_screenshot":
-        filename = args.get("filename", "screenshot.png")
-        result = selenium_screenshot(filename)
-        return JSONResponse({"status": "success", "tool": tool, "result": result})
+        elif tool == "selenium_screenshot":
+            filename = args.get("filename", "screenshot.png")
+            try:
+                result = selenium_screenshot(filename)
+                return JSONResponse({"status": "success", "tool": tool, "result": result})
+            except Exception as e:
+                return JSONResponse(
+                    {
+                        "status": "error",
+                        "tool": tool,
+                        "error": f"Screenshot failed: {str(e)}",
+                    },
+                    status_code=200,
+                )
 
-    else:
+        else:
+            return JSONResponse(
+                {"status": "error", "error": f"Unknown tool '{tool}'."},
+                status_code=404,
+            )
+
+    except Exception as e:
+        # Catch-all safeguard: no unhandled exceptions → no 500s
         return JSONResponse(
-            {"error": f"Unknown tool '{tool}'."}, status_code=404
+            {"status": "error", "tool": tool, "error": f"Server exception: {str(e)}"},
+            status_code=200,
         )
+
 
 # ----------------------------------------------------------
 # Tool Handler: selenium_open_page
