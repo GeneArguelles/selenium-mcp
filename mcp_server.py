@@ -4,7 +4,7 @@
 # Version: v20251027-FULL
 # Author: Gene Arguelles, LLC
 # ==========================================================
-import os, datetime, platform, logging
+import os, datetime, string, platform, logging
 
 # ----------------------------------------------------------
 # ✅ Canonical MCP_VERSION bootstrap
@@ -24,6 +24,7 @@ if not isinstance(MCP_VERSION, str) or not MCP_VERSION.startswith("v"):
 print(f"[INFO] Launching MCP Server (version={MCP_VERSION})")
 
 import json     # ✅ Add this once here
+import openai
 import platform
 import sys
 from fastapi import FastAPI, Request, HTTPException
@@ -38,14 +39,12 @@ from selenium_tools import (
     selenium_get_text,
     selenium_screenshot,
 )
-
+from dotenv import load_dotenv
+load_dotenv('/etc/secrets/.env')
 
 # ----------------------------------------------------------
 # 🌐 Global MCP Version Utility with Auto-Increment + Logging
 # ----------------------------------------------------------
-import os
-import datetime
-import string
 
 def _generate_mcp_version() -> str:
     """Generate an MCP version string like v20251028a, v20251028b, etc."""
@@ -1000,6 +999,80 @@ async def handle_open_page(args: dict):
         return {"url": url, "title": title}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Selenium error: {e}")
+
+# ----------------------------------------------------------
+# Diagnostic Route (Enhanced + Self-Disable Switch + Startup Log)
+# ----------------------------------------------------------
+from fastapi import FastAPI, HTTPException
+
+@app.get("/envcheck")
+def envcheck():
+    # 🔒 0️⃣ Debug mode check — route only active when DEBUG_MODE=True
+    debug_mode = os.getenv("DEBUG_MODE", "False").lower() in ("true", "1", "yes")
+    if not debug_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Diagnostic route disabled. Set DEBUG_MODE=True to enable."
+        )
+
+    render_env_path = "/etc/secrets/.env"
+    local_env_path = ".env"
+
+    # 1️⃣ Determine which .env file is loaded
+    if os.path.exists(render_env_path):
+        env_source = render_env_path
+    elif os.path.exists(local_env_path):
+        env_source = local_env_path
+    else:
+        env_source = "No .env file found (likely environment vars only)."
+
+    # 2️⃣ Gather basic env info safely
+    env_preview = {
+        "ENV_SOURCE": env_source,
+        "RENDER": os.getenv("RENDER", "False"),
+        "PYTHON_VERSION": os.getenv("PYTHON_VERSION", "Not set"),
+        "CHROME_BINARY": os.getenv("CHROME_BINARY", "Not set"),
+        "OPENAI_API_KEY_PREFIX": os.getenv("OPENAI_API_KEY", "")[:5] + "..."
+        if os.getenv("OPENAI_API_KEY")
+        else "Not set",
+    }
+
+    # 3️⃣ Test OpenAI API connectivity
+    openai_status = {}
+    try:
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        if openai.api_key:
+            models = openai.models.list()
+            openai_status = {
+                "api_status": "ok",
+                "models_found": len(models.data),
+                "first_model": models.data[0].id if models.data else "none",
+            }
+        else:
+            openai_status = {"api_status": "missing_key"}
+    except Exception as e:
+        openai_status = {"api_status": "error", "error": str(e)}
+
+    return {
+        "env_status": "ok",
+        "details": env_preview,
+        "openai_check": openai_status,
+    }
+
+
+# ----------------------------------------------------------
+# Local Run Entrypoint (for local testing only)
+# ----------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    resolved_version = locals().get("resolved_version", "unknown")
+
+    debug_mode = os.getenv("DEBUG_MODE", "False").lower() in ("true", "1", "yes")
+    if debug_mode:
+        print("[DEBUG] Diagnostic route enabled — use /envcheck for environment and API verification")
+
+    print(f"[INFO] Launching MCP Server on port 10000 (version={resolved_version})")
+    uvicorn.run(app, host="0.0.0.0", port=10000)
 
 # ----------------------------------------------------------
 # Local Run Entrypoint (for local testing only)
