@@ -44,8 +44,9 @@ fi
 echo "[INFO] ✅ Chrome binary confirmed: $CHROME_BINARY"
 
 # === Launch MCP Server ===
-UVICORN_CMD="uvicorn server:app --host 0.0.0.0 --port 10000"
+UVICORN_CMD="uvicorn mcp_server:app --host 0.0.0.0 --port 10000"
 echo "[INFO] Launching MCP Server via Uvicorn on port 10000..."
+# NOTE: 'mcp_server:app' must match the filename and FastAPI app variable in mcp_server.py
 
 if [[ "$RENDER" == "true" || "$PWD" == *"/opt/render"* ]]; then
   echo "[INFO] Detected Render environment. Starting in foreground..."
